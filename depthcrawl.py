@@ -23,21 +23,27 @@ def roll_table(table: Table, depth: int) -> tuple[int, str]:
 
 
 def generate_treasure():
+    # Roll 1d6 to determine number and quality of items
     quality_roll = random.randint(1, 6)
     count, quality = TREASURE_QUALITY_TABLE[quality_roll]
 
     item_list = []
+
+    # Roll independently for each item
     for _ in range(count):
-        roll = random.randint(1, 20)
-        item = TREASURE_TABLES[quality][roll]
-        item_list.append(item)  # only store the text
+        # Each item gets its own 1d20 roll
+        item_roll = random.randint(1, 20)
+        # Look up item text in the table for that quality
+        item = TREASURE_TABLES[quality][item_roll]
+        item_list.append(item)
 
     return {
         "quality_roll": quality_roll,
         "number_of_items": count,
         "quality": quality,
-        "item_list": item_list,  # renamed from 'items'
+        "item_list": item_list,
     }
+
 
 HTML = """
 <!doctype html>
