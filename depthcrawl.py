@@ -557,16 +557,17 @@ def generate_treasure():
     quality_roll = random.randint(1, 6)
     count, quality = TREASURE_QUALITY_TABLE[quality_roll]
 
-    items = []
+    item_list = []
     for _ in range(count):
         roll = random.randint(1, 20)
         item = TREASURE_TABLES[quality][roll]
-        items.append((roll, item))
+        item_list.append(item)  # only store the text
 
     return {
         "quality_roll": quality_roll,
+        "number_of_items": count,
         "quality": quality,
-        "items": items,
+        "item_list": item_list,  # renamed from 'items'
     }
 
 HTML = """
@@ -603,10 +604,11 @@ Depth:
 {% if treasure %}
 <div class="section">
 <b>Treasure Quality Roll (1d6):</b> {{ treasure.quality_roll }}<br>
+<b>Number of Items:</b> {{ treasure.number_of_items }}<br>
 <b>Quality:</b> {{ treasure.quality }}<br><br>
 
-{% for roll, item in treasure.items() %}
-• <b>{{ treasure.quality.title() }} Treasure ({{ roll }}):</b> {{ item }}<br>
+{% for item in treasure.item_list %}
+• {{ item }}<br>
 {% endfor %}
 </div>
 {% endif %}
