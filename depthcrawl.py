@@ -56,6 +56,7 @@ Depth:
 <input type="number" name="depth" value="{{ depth }}">
 <button type="submit" name="action" value="room">Generate Room</button>
 <button type="submit" name="action" value="treasure">Generate Treasure</button>
+<button type="submit" name="action" value="reset">Reset</button>
 </form>
 
 {% if room %}
@@ -67,6 +68,10 @@ Depth:
 
 <b>Detail ({{ room.detail_roll }}):</b> {{ room.detail }}
 <pre>{{ room.detail_text }}</pre>
+</div>
+{% else %}
+<div class="result">
+<em>Press 'Generate Room' to generate a location</em>
 </div>
 {% endif %}
 
@@ -80,7 +85,12 @@ Depth:
 • {{ item }}<br>
 {% endfor %}
 </div>
+{% else %}
+<div class="section">
+<em>No Treasure found here. Press 'Generate Treasure' to generate one.</em>
+</div>
 {% endif %}
+
 """
 
 # ----------------------------
@@ -89,13 +99,14 @@ Depth:
 
 @app.route("/", methods=["GET", "POST"])
 def index():
+    # Load previous session values or initialize defaults
     depth = session.get("depth", 0)
     room = session.get("room")
     treasure = session.get("treasure")
 
     if request.method == "POST":
         action = request.form.get("action")
-        depth = int(request.form.get("depth", depth))
+        depth = int(request.form.get("depth", depth))  # use submitted depth if available
 
         if action == "room":
             used_depth = depth
@@ -111,12 +122,19 @@ def index():
                 "detail": detail,
                 "detail_text": DETAIL_DESCRIPTIONS.get(detail, "No description available."),
             }
-            depth = used_depth + 1
+            depth = used_depth + 1  # increment depth for next roll
 
         elif action == "treasure":
             treasure = generate_treasure()
 
-        # store in session to persist across requests
+        elif action == "reset":
+            # Clear session and reset all outputs
+            session.clear()
+            depth = 0
+            room = None
+            treasure = None
+
+        # Save updated values back to session
         session["depth"] = depth
         session["room"] = room
         session["treasure"] = treasure
@@ -127,6 +145,7 @@ def index():
         treasure=treasure,
         depth=depth,
     )
+
 
 if __name__ == "__main__":
     app.run(debug=True)
