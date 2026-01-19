@@ -1,7 +1,8 @@
 import random
-from flask import Flask, request, render_template_string
 
+from flask import Flask, request, render_template_string, session
 app = Flask(__name__)
+app.secret_key = "replace-this-with-a-random-secret"  # needed for session
 
 Table = list[tuple[int, str]]
 
@@ -88,13 +89,13 @@ Depth:
 
 @app.route("/", methods=["GET", "POST"])
 def index():
-    room = None
-    treasure = None
-    depth = 0
+    depth = session.get("depth", 0)
+    room = session.get("room")
+    treasure = session.get("treasure")
 
     if request.method == "POST":
         action = request.form.get("action")
-        depth = int(request.form.get("depth", 0))
+        depth = int(request.form.get("depth", depth))
 
         if action == "room":
             used_depth = depth
@@ -110,11 +111,15 @@ def index():
                 "detail": detail,
                 "detail_text": DETAIL_DESCRIPTIONS.get(detail, "No description available."),
             }
-
             depth = used_depth + 1
 
         elif action == "treasure":
             treasure = generate_treasure()
+
+        # store in session to persist across requests
+        session["depth"] = depth
+        session["room"] = room
+        session["treasure"] = treasure
 
     return render_template_string(
         HTML,
