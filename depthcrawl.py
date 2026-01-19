@@ -6,7 +6,7 @@ app = Flask(__name__)
 Table = list[tuple[int, str]]
 
 # ----------------------------
-# TABLES
+# TABLES (room generation)
 # ----------------------------
 
 LOCATIONS: Table = [
@@ -70,6 +70,185 @@ DETAILS: Table = [
     (29, "Blocked Exit"),
     (10**9, "Dead End"),
 ]
+
+# ----------------------------
+# TABLES (treasure)
+# ----------------------------
+
+# 1d6 → (number_of_items, quality)
+TREASURE_QUALITY_TABLE = {
+    0: (1, "mundane"),
+    1: (1, "minor"),
+    2: (2, "minor"),
+    3: (1, "moderate"),
+    4: (2, "moderate"),
+    5: (1, "valuable"),
+    6: (2, "valuable"),
+    7: (1, "excellent"),
+    8: (1, "excellent"),
+    9: (1, "rare"),
+    10: (1, "rare"),
+    11: (1, "legendary"),
+    12: (1, "legendary"),
+}
+
+# Each quality has its own 1d20 table
+TREASURE_TABLES = {
+    "mundane": {
+        1: "Broken pottery shards",
+        2: "Spoilt food",
+        3: "Torn cloth scraps",
+        4: "Rusty iron key",
+        5: "Rotten parchment",
+        6: "Dull knife",
+        7: "Bag full of holes",
+        8: "Damp torch",
+        9: "Frayed rope",
+        10: "Rusty lantern with shattered glass",
+        11: "Pair of worn sandals",
+        12: "Rusty pickaxe",
+        13: "Dusty flask filled with booze",
+        14: "Incomplete set of playing cards",
+        15: "Empty water skin",
+        16: "Axe with a dull blade",
+        17: "Flask of oil",
+        18: "Bent crowbar",
+        19: "Rusty chain",
+        20: "Iron spikes",
+    },
+    "minor": {
+        1: "Bronze trinket (belt buckle, brooch, button, comb)",
+        2: "Brass baubles (candlestick, goblet, incense box)",
+        3: "Copper ornament (bracelet, earring, hairpin)",
+        4: "Brass whistle, bell or small gong",
+        5: "Bronze ceremonial item (dagger, candlesnuffer, scoop)",
+        6: "Copper mirror (handheld, foldable with cracked surface, set into broken comb)",
+        7: "Brass weight tool (small merchants scale, set of counterweights, broken scale arm)",
+        8: "Bronze idol (religious, decorative, bookend, paperweight)",
+        9: "Handful of copper coins (in leather pouch, in rusted jar, wedged in floor crack)",
+        10: "Brass gear with unknown function (cog wheel, unusual key, tiny hinge joint)",
+        11: "Bronze container (bowl, carafe, casket, vase)",
+        12: "Copper plated dice or board-game piece",
+        13: "Dusty leather armor with bronze studs (brigandine, bracers, greaves)",
+        14: "Brass memory keepsake (locket or tiny casket filled with buttons or dried flowers)",
+        15: "Copper trinket (key, necklace, ring)",
+        16: "Copper flask etched with intricate symbols (decorative runes, floral or any animal)",
+        17: "Bronze weapon (shortsword, dagger, spearhead)",
+        18: "Brass baubles (inkwell, lens frame, scroll case)",
+        19: "Bronze artisan kit (stonecutting, woodworking, gardening, tailoring)",
+        20: "Copper wire or bronze chain",
+    },
+    "moderate": {
+        1: "Silver jewelry (chain necklace, engraved ring, filigree bracelet)",
+        2: "Carved stone object (figurine, tablet, or bowl made of alabaster or serpentine)",
+        3: "Iron tool (blacksmith’s tong, carpenter’s square, engraving chisel with initials)",
+        4: "Silver household item (spoon set, wine cup, ornamental comb, handheld mirror)",
+        5: "Silver jewelry with gem (brooch, pin or locket with garnet, onyx or agate)",
+        6: "Stone relief fragment (part of a mural or stele with worn symbols related to location)",
+        7: "Iron weapon (sword, hammerhead, dagger)",
+        8: "Handful of silver coins (in small pouch, wrapped in old cloth, hidden in a false book)",
+        9: "Flawed gemstone (rough topaz, cracked amethyst, cloudy quartz orb)",
+        10: "Iron armor piece (elbow guard, gorget, greaves with etched lines)",
+        11: "Silver ritual item (anointing bowl, prayer pendant, incense spoon)",
+        12: "Decorative inlaid stone box (holding dried ink, wax seal kit, or folded parchment)",
+        13: "Heirloom-quality tools (stone-carver’s mallet with gem inlay, jeweler’s loupe)",
+        14: "Civic tokens (silver badge of office, carved stone voting marker, iron passkey)",
+        15: "Stone jewelry (beaded necklace, ring or earring made of jasper, agate or lapis lazuli)",
+        16: "Silver flask or snuff box (plain but elegant, engraved with initials or a crest)",
+        17: "Iron mechanical part (crank, heavy pinion, gear cluster with maker’s mark)",
+        18: "Stone relic or idol (family ancestor bust or figurine, broken ceremonial plinth)",
+        19: "Silver writing kit (nib pen, scroll tube with silver caps, inkpot with silver lid)",
+        20: "Silver ring with gem (topaz, amethyst or garnet)",
+    },
+    "valuable": {
+        1: "Gold jewelry (signet ring, heavy chain necklace, filigree earring)",
+        2: "Masterwork quality steel weapon (+1 to maneuvers)",
+        3: "Black lead writing tools (engraved stylus, compact scribe’s case)",
+        4: "Rare gemstone, cut (flawless opal, brilliant-cut sapphire, star ruby, diamond)",
+        5: "Gold relic (sun disk, small idol, ceremonial chalice with enamel detailing)",
+        6: "Gilded armor piece (vambrace, emerald-studded gorget, gold-etched helmet)",
+        7: "Black lead art object (etched relief tablet, abstract idol, black-lead mask)",
+        8: "Handful of gold coins (small velvet pouch, clay jar sealed with wax, hidden stack)",
+        9: "Noble insignia (gold brooch with house emblem, black-lead signet, golden scepter)",
+        10: "Rare mineral (chunk of fire opal, piece of starry obsidian, unusual gem cluster)",
+        11: "Gold ornate container (scroll tube, casket with gemstone inlay, perfume vial)",
+        12: "Steel tools (engraver’s kit, medical instruments, chisels with jeweled handles)",
+        13: "Rare gemstone fragments (cracked black opal, raw alexandrite, shard of fire agate)",
+        14: "Gold-plated armor piece (engraved knee guard, pauldron or ceremonial cuirass)",
+        15: "Luxury grooming kit (steel shaving blade, black-lead mirror, gold comb set in velvet)",
+        16: "Relic weapon (longsword with ruby in pommel, gilded hammer, gold-hilted dagger)",
+        17: "Fine jewelry set (matching emerald earrings, chain, and ring in black-lead box)",
+        18: "Golden statuette (mythical creature, ancestral king, or forgotten god, finely sculpted)",
+        19: "Gold lined spectacles or magnifying lense",
+        20: "Gold ring with gem (diamond, emerald, ruby, sapphire)",
+    },
+    "excellent": {
+        1: "Rare wooden object (carved box, smooth mask, writing tablet bound in leather)",
+        2: "Pitchblende idol (abstract figure, hooded ancestral effigy, miniature seated king)",
+        3: "Hornblende-inlaid wooden object (fireproof box, weapon shaft or furnishing)",
+        4: "Wooden relic (spear shaft with name carvings, silver capped cane, hide drum)",
+        5: "Pitchblende weapon component (blunt mace head, pommel core, counterweight)",
+        6: "Hornblende-inlaid artisan tools (carving knife, measuring rod, wood chisel)",
+        7: "Decorative wooden panels (wall or furniture remnants, fragments of an ancient door)",
+        8: "Pitchblende pendant (heavily worn insignia of old rank, ritual medallion on cord)",
+        9: "Hornblende ceremonial mask (faceless expression, animal motif, warrior aspect)",
+        10: "Wooden game board (complete set with pieces, foldable with engraved initials)",
+        11: "Pitchblende container (small thick-walled bowl, empty paint pot with wooden lid)",
+        12: "Wood-carved scroll case (hollow tube with latching ends, coated with hornblende)",
+        13: "Proto-paint (glows faintly but otherwise non-magical)",
+        14: "Wooden statuette (guardian animal, family figure trio, fragmented shrine piece)",
+        15: "Pitchblende or hornblende ore (pitch black, green shimmer, silver speckles)",
+        16: "Master-crafted bow or crossbow (+1 to murder)",
+        17: "Pitchblende jewelry (matte ring with etched rim, bead strand, medallion on cord)",
+        18: "Pitchblende tool (ceremonial hammer, burin for etching stone, anvil fragment)",
+        19: "Hornblende grooming item (finely spaced comb, nail stylus, filigree hairclip)",
+        20: "Wooden personal keepsake (box with family sigil, flute, carved charm)",
+    },
+    "rare": {
+        1: "Ancient tome bound in cracked leather (religious or philosophical essay)",
+        2: "Boxwood sculpture (pale, fine-grained figurine or bust that shows precise detail)",
+        3: "Scholarly treatise (stone-cutting techniques, medicinal fungi or stock farming)",
+        4: "Runebook (contains instructions to paint a single rune, perhaps unknown)",
+        5: "Burl walnut panel fragment (carved wall or furniture piece with intricate patterns)",
+        6: "Explorer's journal (expedition report with maps, perhaps copied from older source)",
+        7: "Oil painting on mahogany panel (portrait, still-life or faded scenes of court or city life)",
+        8: "Artist's sketch folio (plants, humans, animals or objects)",
+        9: "Book of fables (told in short poetic lines, likely once read to children)",
+        10: "Inscribed padauk wood plaque (deep-carved clan vows or ancient edict)",
+        11: "Sample folio (swatches of woven fungus-fiber or hide with artisan annotations)",
+        12: "Poetry book (verses in an archaic dialect, mirthful, romantic or sad)",
+        13: "Embroidered tapestry (family tree, floral patterns, mythical creature)",
+        14: "Ceremonial record book (marked with silver studs, details rites for naming or burial)",
+        15: "Tome of forgotten knowledge (alchemy, medicine, mechanics, enchantment)",
+        16: "Artist’s workbox (dried pigment stones and brushes, still fragrant and glossy)",
+        17: "Book with historic content (town chronicle, biography)",
+        18: "Rare wood grooming item (masterwork comb or makeup brush made of satinwood)",
+        19: "Finely decorated piece of porcelain (vase, bowl, jug, plate, cup)",
+        20: "1 dose of paint (glowing in unusual color, made from ancient forgotten recipe)",
+    },
+    "legendary": {
+        1: "Statuette of a sleeping beast (carved from glossy petrified black mahogany)",
+        2: "Funerary stele (petrified ash, inscribed with a family tree, dates, and achievements)",
+        3: "Mosaic panel (hundreds of petrified olivewood tiles, depicting a historical event)",
+        4: "Gallery bust (noble portrait sculpted from dense petrified rosewood on marble base)",
+        5: "Regal jewelry (bracelet, necklace or ring made of amber, coral or nacre)",
+        6: "Document chest (petrified ebony coffer with gold hinges for royal correspondence)",
+        7: "Luxury game set (full gameboard of petrified ebony with hand-carved ivory pieces)",
+        8: "Regal funeral mask (somber ivory mask with ridged brow and inset coral eyes)",
+        9: "Unique gem (colorful diamond, red sapphire or giant black opal, flawless quality)",
+        10: "Oil painting on petrified walnut panel (showing some overworld landscape)",
+        11: "Arch keystone (carved from petrified teak, featuring faces of judges and scholars)",
+        12: "Regal crown (massive gold with diamonds and other gems, ivory marquetry)",
+        13: "Nacre intarsia panel (oceanic scene set into a petrified cypress mount)",
+        14: "Wall frieze fragment (red coral scrollwork mounted on petrified oak, tiny gold nails)",
+        15: "Intact ivory tusk (engraved or painted with complex patterns, capped with gold)",
+        16: "Giant polished amber with one or more fossilized insects inside",
+        17: "Ivory scroll case (etched with landscapes and gold latches in pristine condition)",
+        18: "Amber figurine (meditating figure sculpted entirely from solid, cloudy amber)",
+        19: "Ivory lyre (musical instrument with intricate nacre inlay along the arms)",
+        20: "Regal scepter or cane (made from petrified ebony, flawless amber as headpiece)",
+    },
+}
 
 # ----------------------------
 # DESCRIPTIONS
@@ -373,21 +552,40 @@ def roll_table(table: Table, depth: int) -> tuple[int, str]:
             return roll, result
     raise RuntimeError("Invalid table")
 
+
+def generate_treasure():
+    quality_roll = random.randint(1, 6)
+    count, quality = TREASURE_QUALITY_TABLE[quality_roll]
+
+    items = []
+    for _ in range(count):
+        roll = random.randint(1, 20)
+        item = TREASURE_TABLES[quality][roll]
+        items.append((roll, item))
+
+    return {
+        "quality_roll": quality_roll,
+        "quality": quality,
+        "items": items,
+    }
+
 HTML = """
 <!doctype html>
-<title>Depthcrawl Room Generator</title>
+<title>Depthcrawl Generator</title>
 <style>
 body { font-family: serif; background:#1e1e1e; color:#e0e0e0; padding:2rem; }
-input, button { font-size:1rem; padding:0.3rem; }
-.result { margin-top:1.5rem; padding:1rem; background:#2a2a2a; }
+input, button { font-size:1rem; padding:0.3rem; margin-right:0.5rem; }
+.section { margin-top:2rem; padding:1rem; background:#2a2a2a; }
 pre { white-space: pre-wrap; background:#1a1a1a; padding:0.8rem; }
 </style>
 
-<h1>Depthcrawl Room Generator</h1>
+<h1>Depthcrawl Generator</h1>
 
 <form method="post">
-Depth: <input type="number" name="depth" value="{{ depth }}">
-<button type="submit">Generate Room</button>
+Depth:
+<input type="number" name="depth" value="{{ depth }}">
+<button type="submit" name="action" value="room">Generate Room</button>
+<button type="submit" name="action" value="treasure">Generate Treasure</button>
 </form>
 
 {% if room %}
@@ -401,31 +599,59 @@ Depth: <input type="number" name="depth" value="{{ depth }}">
 <pre>{{ room.detail_text }}</pre>
 </div>
 {% endif %}
+
+{% if treasure %}
+<div class="section">
+<b>Treasure Quality Roll (1d6):</b> {{ treasure.quality_roll }}<br>
+<b>Quality:</b> {{ treasure.quality }}<br><br>
+
+{% for roll, item in treasure.items() %}
+• <b>{{ treasure.quality.title() }} Treasure ({{ roll }}):</b> {{ item }}<br>
+{% endfor %}
+</div>
+{% endif %}
 """
+
+# ----------------------------
+# ROUTE
+# ----------------------------
 
 @app.route("/", methods=["GET", "POST"])
 def index():
     room = None
+    treasure = None
     depth = 0
 
     if request.method == "POST":
-        used_depth = int(request.form.get("depth", 0))
-        loc_roll, location = roll_table(LOCATIONS, used_depth)
-        det_roll, detail = roll_table(DETAILS, used_depth)
+        action = request.form.get("action")
+        depth = int(request.form.get("depth", 0))
 
-        room = {
-            "used_depth": used_depth,
-            "location_roll": loc_roll,
-            "location": location,
-            "location_text": LOCATION_DESCRIPTIONS.get(location, "No description available."),
-            "detail_roll": det_roll,
-            "detail": detail,
-            "detail_text": DETAIL_DESCRIPTIONS.get(detail, "No description available."),
-        }
+        if action == "room":
+            used_depth = depth
+            loc_roll, location = roll_table(LOCATIONS, used_depth)
+            det_roll, detail = roll_table(DETAILS, used_depth)
 
-        depth = used_depth + 1
+            room = {
+                "used_depth": used_depth,
+                "location_roll": loc_roll,
+                "location": location,
+                "location_text": LOCATION_DESCRIPTIONS.get(location, "No description available."),
+                "detail_roll": det_roll,
+                "detail": detail,
+                "detail_text": DETAIL_DESCRIPTIONS.get(detail, "No description available."),
+            }
 
-    return render_template_string(HTML, room=room, depth=depth)
+            depth = used_depth + 1
+
+        elif action == "treasure":
+            treasure = generate_treasure()
+
+    return render_template_string(
+        HTML,
+        room=room,
+        treasure=treasure,
+        depth=depth,
+    )
 
 if __name__ == "__main__":
     app.run(debug=True)
