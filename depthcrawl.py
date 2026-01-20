@@ -1,6 +1,8 @@
+import math
 import random
 
 from flask import Flask, request, render_template_string, session
+
 app = Flask(__name__)
 app.secret_key = "replace-this-with-a-random-secret"  # needed for session
 
@@ -9,6 +11,7 @@ Table = list[tuple[int, str]]
 from data import (LOCATIONS, DETAILS,
                   LOCATION_DESCRIPTIONS, DETAIL_DESCRIPTIONS,
                   TREASURE_TABLES, TREASURE_QUALITY_TABLE)
+
 
 # ----------------------------
 # LOGIC
@@ -45,6 +48,33 @@ def generate_treasure():
     }
 
 
+DEFAULT_TREASURE_DC = 8
+
+
+def roll_location_treasure(current_dc: int):
+    roll = random.randint(1, 6)
+
+    if roll >= current_dc:
+        # success: generate treasure and reset DC
+        treasure = generate_treasure()
+        return {
+            "roll": roll,
+            "success": True,
+            "treasure": treasure,
+            "next_dc": DEFAULT_TREASURE_DC,
+        }
+    else:
+        # failure: reduce DC
+        reduction = math.ceil(roll / 2)
+        next_dc = max(1, current_dc - reduction)
+        return {
+            "roll": roll,
+            "success": False,
+            "treasure": None,
+            "next_dc": next_dc,
+        }
+
+
 HTML = """
 <!doctype html>
 <title>Depthcrawl Generator</title>
@@ -74,10 +104,28 @@ Depth:
 
 <b>Detail ({{ room.detail_roll }}):</b> {{ room.detail }}
 <pre>{{ room.detail_text }}</pre>
+
+<hr>
+
+<b>Treasure Check:</b><br>
+Rolled {{ room.treasure_roll }} vs DC {{ room.treasure_dc_before }}<br><br>
+
+{% if room.found_treasure %}
+<b>Treasure Found!</b><br>
+<b>Quality:</b> {{ room.found_treasure.quality }}<br>
+<b>Number of Items:</b> {{ room.found_treasure.number_of_items }}<br><br>
+
+{% for item in room.found_treasure.item_list %}
+• {{ item }}<br>
+{% endfor %}
+
+{% else %}
+<em>No treasure to be found here.</em>
+{% endif %}
 </div>
 {% else %}
 <div class="result">
-<em>Press 'Generate Room' to generate a location</em>
+<em>Press 'Generate Room' to generate a location.</em>
 </div>
 {% endif %}
 
@@ -93,11 +141,12 @@ Depth:
 </div>
 {% else %}
 <div class="section">
-<em>No Treasure found here. Press 'Generate Treasure' to generate one.</em>
+<em>Press 'Generate Treasure' to generate additional treasure.</em>
 </div>
 {% endif %}
 
 """
+
 
 # ----------------------------
 # ROUTE
@@ -109,6 +158,7 @@ def index():
     depth = session.get("depth", 0)
     room = session.get("room")
     treasure = session.get("treasure")
+    treasure_dc = session.get("treasure_dc", DEFAULT_TREASURE_DC)
 
     if request.method == "POST":
         action = request.form.get("action")
@@ -119,6 +169,10 @@ def index():
             loc_roll, location = roll_table(LOCATIONS, used_depth)
             det_roll, detail = roll_table(DETAILS, used_depth)
 
+            # roll for location treasure
+            treasure_check = roll_location_treasure(treasure_dc)
+            treasure_dc = treasure_check["next_dc"]
+
             room = {
                 "used_depth": used_depth,
                 "location_roll": loc_roll,
@@ -127,6 +181,11 @@ def index():
                 "detail_roll": det_roll,
                 "detail": detail,
                 "detail_text": DETAIL_DESCRIPTIONS.get(detail, "No description available."),
+
+                # treasure info
+                "treasure_roll": treasure_check["roll"],
+                "treasure_dc_before": session.get("treasure_dc", DEFAULT_TREASURE_DC),
+                "found_treasure": treasure_check["treasure"],
             }
             depth = used_depth + 1  # increment depth for next roll
 
@@ -139,11 +198,13 @@ def index():
             depth = 0
             room = None
             treasure = None
+            session["treasure_dc"] = DEFAULT_TREASURE_DC
 
         # Save updated values back to session
         session["depth"] = depth
         session["room"] = room
         session["treasure"] = treasure
+        session["treasure_dc"] = treasure_dc
 
     return render_template_string(
         HTML,
