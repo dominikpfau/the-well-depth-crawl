@@ -75,6 +75,30 @@ def roll_location_treasure(current_dc: int):
         }
 
 
+DEFAULT_ENCOUNTER_DC = 8
+
+
+def roll_random_encounter(current_dc: int):
+    roll = random.randint(1, 6)
+
+    if roll >= current_dc:
+        # success: encounter happens, reset DC
+        return {
+            "roll": roll,
+            "success": True,
+            "next_dc": DEFAULT_ENCOUNTER_DC,
+        }
+    else:
+        # failure: reduce DC
+        reduction = math.ceil(roll / 2)
+        next_dc = max(1, current_dc - reduction)
+        return {
+            "roll": roll,
+            "success": False,
+            "next_dc": next_dc,
+        }
+
+
 HTML = """
 <!doctype html>
 <title>Depthcrawl Generator</title>
@@ -122,6 +146,18 @@ Rolled {{ room.treasure_roll }} vs DC {{ room.treasure_dc_before }}<br><br>
 {% else %}
 <em>No treasure to be found here.</em>
 {% endif %}
+
+<hr>
+
+<b>Random Encounter Check:</b><br>
+Rolled {{ room.encounter_roll }} vs DC {{ room.encounter_dc_before }}<br><br>
+
+{% if room.has_encounter %}
+<b>⚠ A random encounter occurs!</b>
+{% else %}
+<em>No encounter here.</em>
+{% endif %}
+
 </div>
 {% else %}
 <div class="result">
@@ -159,6 +195,7 @@ def index():
     room = session.get("room")
     treasure = session.get("treasure")
     treasure_dc = session.get("treasure_dc", DEFAULT_TREASURE_DC)
+    encounter_dc = session.get("encounter_dc", DEFAULT_ENCOUNTER_DC)
 
     if request.method == "POST":
         action = request.form.get("action")
@@ -170,8 +207,14 @@ def index():
             det_roll, detail = roll_table(DETAILS, used_depth)
 
             # roll for location treasure
+            treasure_dc_before = treasure_dc
             treasure_check = roll_location_treasure(treasure_dc)
             treasure_dc = treasure_check["next_dc"]
+
+            # roll for random encounter
+            encounter_dc_before = encounter_dc
+            encounter_check = roll_random_encounter(encounter_dc)
+            encounter_dc = encounter_check["next_dc"]
 
             room = {
                 "used_depth": used_depth,
@@ -184,8 +227,13 @@ def index():
 
                 # treasure info
                 "treasure_roll": treasure_check["roll"],
-                "treasure_dc_before": session.get("treasure_dc", DEFAULT_TREASURE_DC),
+                "treasure_dc_before": treasure_dc_before,
                 "found_treasure": treasure_check["treasure"],
+
+                # encounter info
+                "encounter_roll": encounter_check["roll"],
+                "encounter_dc_before": encounter_dc_before,
+                "has_encounter": encounter_check["success"],
             }
             depth = used_depth + 1  # increment depth for next roll
 
@@ -198,13 +246,15 @@ def index():
             depth = 0
             room = None
             treasure = None
-            session["treasure_dc"] = DEFAULT_TREASURE_DC
+            treasure_dc = DEFAULT_TREASURE_DC
+            encounter_dc = DEFAULT_ENCOUNTER_DC
 
         # Save updated values back to session
         session["depth"] = depth
         session["room"] = room
         session["treasure"] = treasure
         session["treasure_dc"] = treasure_dc
+        session["encounter_dc"] = encounter_dc
 
     return render_template_string(
         HTML,
