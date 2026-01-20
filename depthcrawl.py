@@ -4,7 +4,7 @@ import random
 from flask import Flask, request, render_template_string, session
 
 app = Flask(__name__)
-app.secret_key = "replace-this-with-a-random-secret"  # needed for session
+app.secret_key = "replace-this-with-a-random-secret"
 
 Table = list[tuple[int, str]]
 
@@ -26,19 +26,10 @@ def roll_table(table: Table, depth: int) -> tuple[int, str]:
 
 
 def generate_treasure():
-    # Roll 1d6 to determine number and quality of items
     quality_roll = random.randint(1, 6)
     count, quality = TREASURE_QUALITY_TABLE[quality_roll]
 
-    item_list = []
-
-    # Roll independently for each item
-    for _ in range(count):
-        # Each item gets its own 1d20 roll
-        item_roll = random.randint(1, 20)
-        # Look up item text in the table for that quality
-        item = TREASURE_TABLES[quality][item_roll]
-        item_list.append(item)
+    item_list = [TREASURE_TABLES[quality][random.randint(1, 20)] for _ in range(count)]
 
     return {
         "quality_roll": quality_roll,
@@ -49,55 +40,33 @@ def generate_treasure():
 
 
 DEFAULT_TREASURE_DC = 8
+DEFAULT_ENCOUNTER_DC = 8
 
 
 def roll_location_treasure(current_dc: int):
     roll = random.randint(1, 6)
-
     if roll >= current_dc:
-        # success: generate treasure and reset DC
         treasure = generate_treasure()
-        return {
-            "roll": roll,
-            "success": True,
-            "treasure": treasure,
-            "next_dc": DEFAULT_TREASURE_DC,
-        }
+        return {"roll": roll, "success": True, "treasure": treasure, "next_dc": DEFAULT_TREASURE_DC}
     else:
-        # failure: reduce DC
         reduction = math.ceil(roll / 2)
         next_dc = max(1, current_dc - reduction)
-        return {
-            "roll": roll,
-            "success": False,
-            "treasure": None,
-            "next_dc": next_dc,
-        }
-
-
-DEFAULT_ENCOUNTER_DC = 8
+        return {"roll": roll, "success": False, "treasure": None, "next_dc": next_dc}
 
 
 def roll_random_encounter(current_dc: int):
     roll = random.randint(1, 6)
-
     if roll >= current_dc:
-        # success: encounter happens, reset DC
-        return {
-            "roll": roll,
-            "success": True,
-            "next_dc": DEFAULT_ENCOUNTER_DC,
-        }
+        return {"roll": roll, "success": True, "next_dc": DEFAULT_ENCOUNTER_DC}
     else:
-        # failure: reduce DC
         reduction = math.ceil(roll / 2)
         next_dc = max(1, current_dc - reduction)
-        return {
-            "roll": roll,
-            "success": False,
-            "next_dc": next_dc,
-        }
+        return {"roll": roll, "success": False, "next_dc": next_dc}
 
+
+# ----------------------------
+# HTML TEMPLATE
+# ----------------------------
 
 HTML = """
 <!doctype html>
@@ -107,6 +76,7 @@ body { font-family: serif; background:#1e1e1e; color:#e0e0e0; padding:2rem; }
 input, button { font-size:1rem; padding:0.3rem; margin-right:0.5rem; }
 .section { margin-top:2rem; padding:1rem; background:#2a2a2a; }
 pre { white-space: pre-wrap; background:#1a1a1a; padding:0.8rem; }
+button[disabled] { opacity: 0.5; cursor: not-allowed; }
 </style>
 
 <h1>Depthcrawl Generator</h1>
@@ -114,13 +84,14 @@ pre { white-space: pre-wrap; background:#1a1a1a; padding:0.8rem; }
 <form method="post">
 Depth:
 <input type="number" name="depth" value="{{ depth }}">
-<button type="submit" name="action" value="room">Generate Room</button>
+<button type="submit" name="action" value="room">Generate Location</button>
+<button type="submit" name="action" value="ransack" {% if not room or room.ransacked %}disabled{% endif %}>Ransack Location</button>
 <button type="submit" name="action" value="treasure">Generate Treasure</button>
 <button type="submit" name="action" value="reset">Reset</button>
 </form>
 
 {% if room %}
-<div class="result">
+<div class="section">
 <b>Used Depth:</b> {{ room.used_depth }}<br><br>
 
 <b>Location ({{ room.location_roll }}):</b> {{ room.location }}
@@ -131,39 +102,50 @@ Depth:
 
 <hr>
 
-<b>Treasure Check:</b><br>
-Rolled {{ room.treasure_roll }} vs DC {{ room.treasure_dc_before }}<br><br>
+<b>Ransacking:</b><br>
+{% if not room.ransacked %}
+<em>This location has not been ransacked.</em>
+{% else %}
+Rolled {{ room.ransack_result.treasure_roll }} vs DC {{ room.ransack_result.treasure_dc_before }}<br><br>
 
-{% if room.found_treasure %}
+{% if room.ransack_result.found_treasure %}
 <b>Treasure Found!</b><br>
-<b>Quality:</b> {{ room.found_treasure.quality }}<br>
-<b>Number of Items:</b> {{ room.found_treasure.number_of_items }}<br><br>
+<b>Quality:</b> {{ room.ransack_result.found_treasure.quality }}<br>
+<b>Number of Items:</b> {{ room.ransack_result.found_treasure.number_of_items }}<br><br>
 
-{% for item in room.found_treasure.item_list %}
+{% for item in room.ransack_result.found_treasure.item_list %}
 • {{ item }}<br>
 {% endfor %}
-
 {% else %}
 <em>No treasure to be found here.</em>
 {% endif %}
+{% endif %}
+</div>
 
-<hr>
+{% else %}
+<div class="section">
+<b>Location:</b><br>
+<em>Press 'Generate Location' to generate a new location.</em>
+</div>
 
-<b>Random Encounter Check:</b><br>
-Rolled {{ room.encounter_roll }} vs DC {{ room.encounter_dc_before }}<br><br>
+{% endif %}
 
-{% if room.has_encounter %}
+<!-- SINGLE ENCOUNTER SECTION -->
+<div class="section">
+<b>Random Encounter:</b><br>
+{% if latest_encounter %}
+<b>Trigger:</b> {{ latest_encounter.source }}<br>
+Rolled {{ latest_encounter.roll }} vs DC {{ latest_encounter.dc_before }}<br><br>
+
+{% if latest_encounter.success %}
 <b>⚠ A random encounter occurs!</b>
 {% else %}
-<em>No encounter here.</em>
+<em>No encounter.</em>
 {% endif %}
-
-</div>
 {% else %}
-<div class="result">
-<em>Press 'Generate Room' to generate a location.</em>
-</div>
+<em>No encounter check yet.</em>
 {% endif %}
+</div>
 
 {% if treasure %}
 <div class="section">
@@ -180,9 +162,7 @@ Rolled {{ room.encounter_roll }} vs DC {{ room.encounter_dc_before }}<br><br>
 <em>Press 'Generate Treasure' to generate additional treasure.</em>
 </div>
 {% endif %}
-
 """
-
 
 # ----------------------------
 # ROUTE
@@ -196,25 +176,28 @@ def index():
     treasure = session.get("treasure")
     treasure_dc = session.get("treasure_dc", DEFAULT_TREASURE_DC)
     encounter_dc = session.get("encounter_dc", DEFAULT_ENCOUNTER_DC)
+    latest_encounter = session.get("latest_encounter")
 
     if request.method == "POST":
         action = request.form.get("action")
-        depth = int(request.form.get("depth", depth))  # use submitted depth if available
+        depth = int(request.form.get("depth", depth))
 
         if action == "room":
             used_depth = depth
             loc_roll, location = roll_table(LOCATIONS, used_depth)
             det_roll, detail = roll_table(DETAILS, used_depth)
 
-            # roll for location treasure
-            treasure_dc_before = treasure_dc
-            treasure_check = roll_location_treasure(treasure_dc)
-            treasure_dc = treasure_check["next_dc"]
-
-            # roll for random encounter
+            # roll encounter (shared DC)
             encounter_dc_before = encounter_dc
             encounter_check = roll_random_encounter(encounter_dc)
             encounter_dc = encounter_check["next_dc"]
+
+            latest_encounter = {
+                "source": "Entering location",
+                "roll": encounter_check["roll"],
+                "dc_before": encounter_dc_before,
+                "success": encounter_check["success"],
+            }
 
             room = {
                 "used_depth": used_depth,
@@ -224,43 +207,63 @@ def index():
                 "detail_roll": det_roll,
                 "detail": detail,
                 "detail_text": DETAIL_DESCRIPTIONS.get(detail, "No description available."),
+                "ransacked": False,
+                "ransack_result": None,
+            }
 
-                # treasure info
+            depth = used_depth + 1
+
+        elif action == "ransack" and room and not room.get("ransacked"):
+            # roll treasure
+            treasure_dc_before = treasure_dc
+            treasure_check = roll_location_treasure(treasure_dc)
+            treasure_dc = treasure_check["next_dc"]
+
+            # roll encounter (shared DC)
+            encounter_dc_before = encounter_dc
+            encounter_check = roll_random_encounter(encounter_dc)
+            encounter_dc = encounter_check["next_dc"]
+
+            latest_encounter = {
+                "source": "Ransacking location",
+                "roll": encounter_check["roll"],
+                "dc_before": encounter_dc_before,
+                "success": encounter_check["success"],
+            }
+
+            room["ransacked"] = True
+            room["ransack_result"] = {
                 "treasure_roll": treasure_check["roll"],
                 "treasure_dc_before": treasure_dc_before,
                 "found_treasure": treasure_check["treasure"],
-
-                # encounter info
-                "encounter_roll": encounter_check["roll"],
-                "encounter_dc_before": encounter_dc_before,
-                "has_encounter": encounter_check["success"],
             }
-            depth = used_depth + 1  # increment depth for next roll
 
         elif action == "treasure":
             treasure = generate_treasure()
 
         elif action == "reset":
-            # Clear session and reset all outputs
             session.clear()
             depth = 0
             room = None
             treasure = None
             treasure_dc = DEFAULT_TREASURE_DC
             encounter_dc = DEFAULT_ENCOUNTER_DC
+            latest_encounter = None
 
-        # Save updated values back to session
+        # persist updated session
         session["depth"] = depth
         session["room"] = room
         session["treasure"] = treasure
         session["treasure_dc"] = treasure_dc
         session["encounter_dc"] = encounter_dc
+        session["latest_encounter"] = latest_encounter
 
     return render_template_string(
         HTML,
         room=room,
         treasure=treasure,
         depth=depth,
+        latest_encounter=latest_encounter,
     )
 
 
