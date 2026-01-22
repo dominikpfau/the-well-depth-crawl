@@ -52,7 +52,7 @@ Rolled {{ room.ransack_result.treasure_roll }} vs DC {{ room.ransack_result.trea
 • {{ item }}<br>
 {% endfor %}
 {% else %}
-<em>No treasure to be found here.</em>
+<em>No treasure was found here.</em>
 {% endif %}
 {% endif %}
 </div>

@@ -64,6 +64,61 @@ DETAILS: list[tuple[int, str]] = [
     (10 ** 9, "Dead End"),
 ]
 
+LOCATION_MODIFIERS = {
+    "Abandoned Shop": {
+        "treasure_roll": -1,
+    },
+    "Crypt": {
+        "treasure_quality": +1,
+    },
+    "Dormitories": {
+        "treasure_quality": -1,
+    },
+    "Laboratory": {
+        "treasure_quality": +2,
+    },
+    "Library": {
+        "treasure_quality": +2,
+    },
+    "Mausoleum": {
+        "treasure_quality": +2,
+    },
+    "Ossuary": {
+        "encounter_roll": +2,
+        "treasure_quality": -2,
+    },
+    "Slum": {
+        "block_positive_treasure_roll": True,
+        "treasure_roll": -2,
+    },
+    "Temple": {
+        "encounter_roll": +1,
+        "treasure_quality": +1,
+        "scope": "ransack",
+    },
+}
+
+DETAIL_MODIFIERS = {
+    "Amphoras": {
+        "encounter_roll": +1,
+        "treasure_roll": +1,
+        "scope": "ransack",
+    },
+    "Looted": {
+        "no_treasure": True,
+    },
+    "Repurposed into Crypt": {
+        "block_positive_treasure_quality": True,
+    },
+    "Treasure Pile": {
+        "encounter_roll": +1,
+        "scope": "ransack",
+    },
+    "Vault": {
+        "treasure_roll": +1,
+    },
+}
+
 # ----------------------------
 # TREASURE GENERATOR
 # ----------------------------
