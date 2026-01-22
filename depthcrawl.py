@@ -1,7 +1,7 @@
 import math
 import random
 
-from flask import Flask, request, render_template_string, session
+from flask import Flask, request, render_template, session
 
 app = Flask(__name__)
 app.secret_key = "replace-this-with-a-random-secret"
@@ -149,13 +149,6 @@ def roll_random_encounter(current_dc: int, mods: dict):
 
 
 # ----------------------------
-# HTML TEMPLATE
-# ----------------------------
-
-from html import HTML
-
-
-# ----------------------------
 # ROUTE
 # ----------------------------
 
@@ -252,8 +245,8 @@ def index():
         session["encounter_dc"] = encounter_dc
         session["latest_encounter"] = latest_encounter
 
-    return render_template_string(
-        HTML,
+    return render_template(
+        "index.html",
         room=room,
         treasure=treasure,
         depth=depth,

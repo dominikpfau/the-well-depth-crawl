@@ -1,8 +1,3 @@
-# ----------------------------
-# HTML TEMPLATE
-# ----------------------------
-
-HTML = """
 <!doctype html>
 <html lang="en">
 <head>
@@ -62,10 +57,10 @@ HTML = """
 
     <!-- Disabled if no room exists or location already ransacked -->
     <button
-        type="submit"
-        name="action"
-        value="ransack"
-        {% if not room or room.ransacked %}disabled{% endif %}
+            type="submit"
+            name="action"
+            value="ransack"
+            {% if not room or room.ransacked %}disabled{% endif %}
     >
         Ransack Location
     </button>
@@ -103,22 +98,22 @@ HTML = """
     <b>Ransacking:</b><br>
 
     {% if not room.ransacked %}
-        <em>This location has not been ransacked.</em>
+    <em>This location has not been ransacked.</em>
     {% else %}
-        Rolled {{ room.ransack_result.treasure_roll }}
-        vs DC {{ room.ransack_result.treasure_dc_before }}<br><br>
+    Rolled {{ room.ransack_result.treasure_roll }}
+    vs DC {{ room.ransack_result.treasure_dc_before }}<br><br>
 
-        {% if room.ransack_result.found_treasure %}
-            <b>Treasure Found!</b><br>
-            <b>Quality:</b> {{ room.ransack_result.found_treasure.quality }}<br>
-            <b>Number of Items:</b> {{ room.ransack_result.found_treasure.number_of_items }}<br><br>
+    {% if room.ransack_result.found_treasure %}
+    <b>Treasure Found!</b><br>
+    <b>Quality:</b> {{ room.ransack_result.found_treasure.quality }}<br>
+    <b>Number of Items:</b> {{ room.ransack_result.found_treasure.number_of_items }}<br><br>
 
-            {% for item in room.ransack_result.found_treasure.item_list %}
-                • {{ item }}<br>
-            {% endfor %}
-        {% else %}
-            <em>No treasure was found here.</em>
-        {% endif %}
+    {% for item in room.ransack_result.found_treasure.item_list %}
+    • {{ item }}<br>
+    {% endfor %}
+    {% else %}
+    <em>No treasure was found here.</em>
+    {% endif %}
     {% endif %}
 
 </div>
@@ -139,17 +134,17 @@ HTML = """
     <b>Random Encounter:</b><br>
 
     {% if latest_encounter %}
-        <b>Trigger:</b> {{ latest_encounter.source }}<br>
-        Rolled {{ latest_encounter.roll }}
-        vs DC {{ latest_encounter.dc_before }}<br><br>
+    <b>Trigger:</b> {{ latest_encounter.source }}<br>
+    Rolled {{ latest_encounter.roll }}
+    vs DC {{ latest_encounter.dc_before }}<br><br>
 
-        {% if latest_encounter.success %}
-            <b>⚠ A random encounter occurs!</b>
-        {% else %}
-            <em>No encounter.</em>
-        {% endif %}
+    {% if latest_encounter.success %}
+    <b>⚠ A random encounter occurs!</b>
     {% else %}
-        <em>No encounter check yet.</em>
+    <em>No encounter.</em>
+    {% endif %}
+    {% else %}
+    <em>No encounter check yet.</em>
     {% endif %}
 </div>
 
@@ -163,7 +158,7 @@ HTML = """
     <b>Quality:</b> {{ treasure.quality }}<br><br>
 
     {% for item in treasure.item_list %}
-        • {{ item }}<br>
+    • {{ item }}<br>
     {% endfor %}
 </div>
 {% else %}
@@ -174,4 +169,3 @@ HTML = """
 
 </body>
 </html>
-"""
