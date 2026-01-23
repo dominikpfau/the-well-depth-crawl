@@ -97,6 +97,7 @@ def generate_treasure(quality_mod=0):
 
     return {
         "quality_roll": quality_roll,
+        "quality_mod": quality_mod,
         "raw_quality_roll": raw_roll,
         "number_of_items": count,
         "quality": quality,
@@ -110,26 +111,37 @@ DEFAULT_ENCOUNTER_DC = 8
 
 def roll_location_treasure(current_dc: int, mods: dict):
     if mods["no_treasure"]:
-        return {"roll": None, "success": False, "treasure": None, "next_dc": current_dc, "blocked": True, }
+        return {
+            "blocked": True,
+            "raw_roll": None,
+            "mod": 0,
+            "roll": None,
+            "success": False,
+            "treasure": None,
+            "next_dc": current_dc,
+        }
 
     raw_roll = random.randint(1, 6)
-    roll = raw_roll + mods["treasure_roll"]
+    treasure_mod = mods["treasure_roll"]
+    roll = raw_roll + treasure_mod
 
     if roll >= current_dc:
         treasure = generate_treasure(mods["treasure_quality"])
         return {
             "roll": roll,
             "raw_roll": raw_roll,
+            "mod": treasure_mod,
             "success": True,
             "treasure": treasure,
             "next_dc": DEFAULT_TREASURE_DC,
         }
     else:
-        reduction = math.ceil(raw_roll / 2)
+        reduction = max(0, math.ceil(roll / 2))
         next_dc = max(1, current_dc - reduction)
         return {
             "roll": roll,
             "raw_roll": raw_roll,
+            "mod": treasure_mod,
             "success": False,
             "treasure": None,
             "next_dc": next_dc,
@@ -138,14 +150,38 @@ def roll_location_treasure(current_dc: int, mods: dict):
 
 def roll_random_encounter(current_dc: int, mods: dict):
     raw_roll = random.randint(1, 6)
-    roll = raw_roll + mods["encounter_roll"]
+    encounter_mod = mods["encounter_roll"]
+    roll = raw_roll + encounter_mod
 
     if roll >= current_dc:
-        return {"roll": roll, "raw_roll": raw_roll, "success": True, "next_dc": DEFAULT_ENCOUNTER_DC}
+        return {
+            "roll": roll,
+            "raw_roll": raw_roll,
+            "mod": encounter_mod,
+            "success": True,
+            "next_dc": DEFAULT_ENCOUNTER_DC,
+        }
     else:
-        reduction = math.ceil(raw_roll / 2)
+        reduction = max(0, math.ceil(roll / 2))
         next_dc = max(1, current_dc - reduction)
-        return {"roll": roll, "raw_roll": raw_roll, "success": False, "next_dc": next_dc}
+        return {
+            "roll": roll,
+            "raw_roll": raw_roll,
+            "mod": encounter_mod,
+            "success": False,
+            "next_dc": next_dc,
+        }
+
+
+def format_roll(raw, mod):
+    if mod is None or mod == 0:
+        return str(raw)
+
+    sign = "+" if mod > 0 else "−"
+    return f"{raw} {sign} {abs(mod)}"
+
+
+app.jinja_env.globals["format_roll"] = format_roll
 
 
 # ----------------------------
@@ -192,6 +228,8 @@ def index():
             latest_encounter = {
                 "source": "Entering location",
                 "roll": encounter_check["roll"],
+                "raw_roll": encounter_check["raw_roll"],
+                "mod": encounter_check["mod"],
                 "dc_before": encounter_dc_before,
                 "success": encounter_check["success"],
             }
@@ -214,6 +252,8 @@ def index():
             latest_encounter = {
                 "source": "Ransacking location",
                 "roll": encounter_check["roll"],
+                "raw_roll": encounter_check["raw_roll"],
+                "mod": encounter_check["mod"],
                 "dc_before": encounter_dc_before,
                 "success": encounter_check["success"],
             }
@@ -221,8 +261,11 @@ def index():
             room["ransacked"] = True
             room["ransack_result"] = {
                 "treasure_roll": treasure_check["roll"],
+                "raw_roll": treasure_check["raw_roll"],
+                "mod": treasure_check["mod"],
                 "treasure_dc_before": treasure_dc_before,
                 "found_treasure": treasure_check["treasure"],
+                "blocked": treasure_check.get("blocked", False),
             }
 
         elif action == "treasure":

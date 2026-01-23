@@ -100,12 +100,21 @@
     {% if not room.ransacked %}
     <em>This location has not been ransacked.</em>
     {% else %}
-    Rolled {{ room.ransack_result.treasure_roll }}
+    {% if room.ransack_result.blocked %}
+    <em>No treasure can be found here.</em>
+    {% else %}
+    Rolled {{ format_roll(room.ransack_result.raw_roll, room.ransack_result.mod) }}
     vs DC {{ room.ransack_result.treasure_dc_before }}<br><br>
 
     {% if room.ransack_result.found_treasure %}
     <b>Treasure Found!</b><br>
-    <b>Quality:</b> {{ room.ransack_result.found_treasure.quality }}<br>
+
+    <b>Quality:</b>
+    {{ room.ransack_result.found_treasure.quality }}
+    (Rolled {{ format_roll( room.ransack_result.found_treasure.raw_quality_roll,
+    room.ransack_result.found_treasure.quality_mod)}})
+    <br>
+
     <b>Number of Items:</b> {{ room.ransack_result.found_treasure.number_of_items }}<br><br>
 
     {% for item in room.ransack_result.found_treasure.item_list %}
@@ -115,6 +124,8 @@
     <em>No treasure was found here.</em>
     {% endif %}
     {% endif %}
+    {% endif %}
+
 
 </div>
 
@@ -135,9 +146,8 @@
 
     {% if latest_encounter %}
     <b>Trigger:</b> {{ latest_encounter.source }}<br>
-    Rolled {{ latest_encounter.roll }}
+    Rolled {{ format_roll(latest_encounter.raw_roll, latest_encounter.mod) }}
     vs DC {{ latest_encounter.dc_before }}<br><br>
-
     {% if latest_encounter.success %}
     <b>⚠ A random encounter occurs!</b>
     {% else %}
@@ -155,7 +165,8 @@
 <div class="section">
     <b>Treasure Quality Roll (1d6):</b> {{ treasure.quality_roll }}<br>
     <b>Number of Items:</b> {{ treasure.number_of_items }}<br>
-    <b>Quality:</b> {{ treasure.quality }}<br><br>
+    <b>Quality:</b> {{ treasure.quality }}
+    <br><br>
 
     {% for item in treasure.item_list %}
     • {{ item }}<br>
