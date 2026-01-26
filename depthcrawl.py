@@ -8,7 +8,8 @@ app.secret_key = "replace-this-with-a-random-secret"
 
 Table = list[tuple[int, str]]
 
-from data import (LOCATIONS, DETAILS,
+from data import (LEVEL_MODIFIERS,
+                  LOCATIONS, DETAILS,
                   LOCATION_MODIFIERS, DETAIL_MODIFIERS,
                   LOCATION_DESCRIPTIONS, DETAIL_DESCRIPTIONS,
                   TREASURE_TABLES, TREASURE_QUALITY_TABLE)
@@ -180,8 +181,12 @@ def format_roll(raw, mod):
     sign = "+" if mod > 0 else "−"
     return f"{raw} {sign} {abs(mod)}"
 
+def format_modifier(mod):
+    sign = "+" if mod is None or mod >= 0 else "−"
+    return f"{sign}{abs(mod)}"
 
 app.jinja_env.globals["format_roll"] = format_roll
+app.jinja_env.globals["format_modifier"] = format_modifier
 
 
 # ----------------------------
@@ -197,10 +202,16 @@ def index():
     treasure_dc = session.get("treasure_dc", DEFAULT_TREASURE_DC)
     encounter_dc = session.get("encounter_dc", DEFAULT_ENCOUNTER_DC)
     latest_encounter = session.get("latest_encounter")
+    level = session.get("level", 1)
+    level_modifiers = session.get("level_modifiers", LEVEL_MODIFIERS.get(level, {"wealth": 0, "population": 0}))
 
     if request.method == "POST":
         action = request.form.get("action")
         depth = int(request.form.get("depth", depth))
+
+        # read level from form or session
+        level = int(request.form.get("level", session.get("level", 1)))
+        level_modifiers = LEVEL_MODIFIERS.get(level, {"wealth": 0, "population": 0})
 
         if action == "room":
             used_depth = depth
@@ -219,6 +230,10 @@ def index():
                 "ransack_result": None,
             }
             mods = collect_modifiers(room, trigger="room")
+            # add level modifiers
+            mods["treasure_roll"] += level_modifiers["wealth"]
+            mods["treasure_quality"] += level_modifiers["wealth"]
+            mods["encounter_roll"] += level_modifiers["population"]
 
             # roll encounter (shared DC)
             encounter_dc_before = encounter_dc
@@ -238,6 +253,10 @@ def index():
 
         elif action == "ransack" and room and not room.get("ransacked"):
             mods = collect_modifiers(room, trigger="ransack")
+            # add level modifiers
+            mods["treasure_roll"] += level_modifiers["wealth"]
+            mods["treasure_quality"] += level_modifiers["wealth"]
+            mods["encounter_roll"] += level_modifiers["population"]
 
             # roll treasure
             treasure_dc_before = treasure_dc
@@ -287,6 +306,8 @@ def index():
         session["treasure_dc"] = treasure_dc
         session["encounter_dc"] = encounter_dc
         session["latest_encounter"] = latest_encounter
+        session["level"] = level
+        session["level_modifiers"] = level_modifiers
 
     return render_template(
         "index.html",
@@ -294,6 +315,8 @@ def index():
         treasure=treasure,
         depth=depth,
         latest_encounter=latest_encounter,
+        level=level,
+        level_modifiers=level_modifiers,
     )
 
 

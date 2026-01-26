@@ -48,6 +48,13 @@
      MAIN CONTROL FORM
      ========================= -->
 <form method="post">
+    Level:
+    <select name="level">
+        {% for lvl in range(1, 13) %}
+        <option value="{{ lvl }}" {% if lvl== level %}selected{% endif %}>Level {{ lvl }}</option>
+        {% endfor %}
+    </select>
+
     Depth:
     <input type="number" name="depth" value="{{ depth }}">
 
@@ -73,6 +80,30 @@
         Reset
     </button>
 </form>
+
+<!-- =========================
+     LEVEL DETAILS
+     ========================= -->
+{% if level %}
+<div class="section">
+    <b>Current Level: {{ level }}</b><br>
+    <b>Level Modifiers:</b>
+    {% if level_modifiers %}
+        <ul>
+        {% for key, value in level_modifiers.items() %}
+            {% if value != 0 %}
+                <li>
+                    {{ key.replace("_", " ").title() }}:
+                    {{ format_modifier(value) }}
+                </li>
+            {% endif %}
+        {% endfor %}
+        </ul>
+    {% else %}
+        <em>No active modifiers.</em>
+    {% endif %}
+</div>
+{% endif %}
 
 <!-- =========================
      LOCATION OUTPUT

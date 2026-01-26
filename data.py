@@ -1,4 +1,23 @@
 # ----------------------------
+# LEVELS (of the Well)
+# ----------------------------
+
+LEVEL_MODIFIERS = {
+    1: {"wealth": -1, "population": 0},
+    2: {"wealth": 0, "population": 0, "awareness": -1, "navigation": -1},
+    3: {"wealth": +1, "population": +1, "awareness": +1},
+    4: {"wealth": +1, "population": 0},
+    5: {"wealth": +1, "population": 0},
+    6: {"wealth": +2, "population": +2},
+    7: {"wealth": +1, "population": +2, "awareness": -1},
+    8: {"wealth": 0, "population": 0, "navigation": -2},
+    9: {"wealth": +1, "population": +1},
+    10: {"wealth": +1, "population": +1, "awareness": -1},
+    11: {"wealth": +3, "population": 0, "navigation": +2},
+    12: {"wealth": 0, "population": +3},
+}
+
+# ----------------------------
 # LOCATION GENERATOR
 # ----------------------------
 
