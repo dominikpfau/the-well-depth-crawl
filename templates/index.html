@@ -13,11 +13,10 @@
             padding: 2rem;
         }
 
-        input,
-        button {
+        input, select, button {
             font-size: 1rem;
-            padding: 0.3rem;
-            margin-right: 0.5rem;
+            padding: 0.3rem 0.6rem;
+            margin: 0.3rem;
         }
 
         .section {
@@ -32,10 +31,35 @@
             padding: 0.8rem;
         }
 
-        /* Disabled button visual feedback */
         button[disabled] {
             opacity: 0.5;
             cursor: not-allowed;
+        }
+
+        /* ------------------------
+           Form Layout
+           ------------------------ */
+        .form-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-row > * {
+            margin-right: 0.5rem;
+            margin-bottom: 0.3rem;
+        }
+
+        .button-row {
+            display: flex;
+            flex-wrap: wrap;
+            margin-top: 0.5rem;
+        }
+
+        .button-row button {
+            flex: 1 1 auto;
+            min-width: 120px;
         }
     </style>
 </head>
@@ -48,43 +72,35 @@
      MAIN CONTROL FORM
      ========================= -->
 <form method="post">
-    Level:
-    <select name="level" onchange="this.form.submit()">
-        <option value="" {% if level is none %}selected{% endif %} disabled>
-            — Select Level —
-        </option>
 
-        {% for lvl in range(1, 13) %}
-        <option value="{{ lvl }}" {% if lvl == level %}selected{% endif %}>
-            Level {{ lvl }}
-        </option>
-        {% endfor %}
-    </select>
+    <!-- Row 1: Level and Depth -->
+    <div class="form-row">
+        <label for="level">Level:</label>
+        <select name="level" id="level" onchange="this.form.submit()">
+            <option value="" {% if level is none %}selected{% endif %} disabled>
+                — Select Level —
+            </option>
+            {% for lvl in range(1, 13) %}
+            <option value="{{ lvl }}" {% if lvl == level %}selected{% endif %}>
+                Level {{ lvl }}
+            </option>
+            {% endfor %}
+        </select>
 
-    Depth:
-    <input type="number" name="depth" value="{{ depth }}">
+        <label for="depth">Depth:</label>
+        <input type="number" id="depth" name="depth" value="{{ depth }}">
+    </div>
 
-    <button type="submit" name="action" value="room">
-        Generate Location
-    </button>
+    <!-- Row 2: Action Buttons -->
+    <div class="button-row">
+        <button type="submit" name="action" value="room">Generate Location</button>
+        <button type="submit" name="action" value="ransack" {% if not room or room.ransacked %}disabled{% endif %}>
+            Ransack Location
+        </button>
+        <button type="submit" name="action" value="treasure">Generate Treasure</button>
+        <button type="submit" name="action" value="reset">Reset</button>
+    </div>
 
-    <!-- Disabled if no room exists or location already ransacked -->
-    <button
-            type="submit"
-            name="action"
-            value="ransack"
-            {% if not room or room.ransacked %}disabled{% endif %}
-    >
-        Ransack Location
-    </button>
-
-    <button type="submit" name="action" value="treasure">
-        Generate Treasure
-    </button>
-
-    <button type="submit" name="action" value="reset">
-        Reset
-    </button>
 </form>
 
 <!-- =========================
@@ -92,16 +108,13 @@
      ========================= -->
 {% if level %}
 <div class="section">
-    <b>Current Level: {{ level }}</b><br>
-    <b>Modifiers:</b>
+    <strong>Current Level:</strong> {{ level }}<br>
+    <strong>Modifiers:</strong>
     {% if level_modifiers %}
         <ul>
         {% for key, value in level_modifiers.items() %}
             {% if value != 0 %}
-                <li>
-                    {{ key.replace("_", " ").title() }}:
-                    {{ format_modifier(value) }}
-                </li>
+                <li>{{ key.replace("_", " ").title() }}: {{ format_modifier(value) }}</li>
             {% endif %}
         {% endfor %}
         </ul>
@@ -116,82 +129,66 @@
      ========================= -->
 {% if room %}
 <div class="section">
+    <strong>Current Depth:</strong> {{ room.used_depth }}<br><br>
 
-    <b>Current Depth:</b> {{ room.used_depth }}<br><br>
-
-    <!-- Location -->
-    <b>Location ({{ room.location_roll }}):</b> {{ room.location }}
+    <strong>Location ({{ room.location_roll }}):</strong> {{ room.location }}
     <pre>{{ room.location_text }}</pre>
 
-    <!-- Detail -->
-    <b>Detail ({{ room.detail_roll }}):</b> {{ room.detail }}
+    <strong>Detail ({{ room.detail_roll }}):</strong> {{ room.detail }}
     <pre>{{ room.detail_text }}</pre>
 
     <hr>
 
-    <!-- =====================
-         RANSACKING SECTION
-         ===================== -->
-    <b>Ransacking:</b><br>
-
+    <strong>Ransacking:</strong><br>
     {% if not room.ransacked %}
-    <em>This location has not been ransacked.</em>
+        <em>This location has not been ransacked.</em>
     {% else %}
-    {% if room.ransack_result.blocked %}
-    <em>No treasure can be found here.</em>
-    {% else %}
-    Rolled {{ format_roll(room.ransack_result.raw_roll, room.ransack_result.mod) }}
-    vs DC {{ room.ransack_result.treasure_dc_before }}<br><br>
+        {% if room.ransack_result.blocked %}
+            <em>No treasure can be found here.</em>
+        {% else %}
+            Rolled {{ format_roll(room.ransack_result.raw_roll, room.ransack_result.mod) }}
+            vs DC {{ room.ransack_result.treasure_dc_before }}<br><br>
 
-    {% if room.ransack_result.found_treasure %}
-    <b>Treasure Found!</b><br>
+            {% if room.ransack_result.found_treasure %}
+            <strong>Treasure Found!</strong><br>
+            <strong>Quality:</strong> {{ room.ransack_result.found_treasure.quality }}
+            (Rolled {{ format_roll(room.ransack_result.found_treasure.raw_quality_roll,
+                                   room.ransack_result.found_treasure.quality_mod)}})
+            <br>
+            <strong>Number of Items:</strong> {{ room.ransack_result.found_treasure.number_of_items }}<br><br>
 
-    <b>Quality:</b>
-    {{ room.ransack_result.found_treasure.quality }}
-    (Rolled {{ format_roll( room.ransack_result.found_treasure.raw_quality_roll,
-    room.ransack_result.found_treasure.quality_mod)}})
-    <br>
-
-    <b>Number of Items:</b> {{ room.ransack_result.found_treasure.number_of_items }}<br><br>
-
-    {% for item in room.ransack_result.found_treasure.item_list %}
-    • {{ item }}<br>
-    {% endfor %}
-    {% else %}
-    <em>No treasure was found here.</em>
+            {% for item in room.ransack_result.found_treasure.item_list %}
+            • {{ item }}<br>
+            {% endfor %}
+            {% else %}
+            <em>No treasure was found here.</em>
+            {% endif %}
+        {% endif %}
     {% endif %}
-    {% endif %}
-    {% endif %}
-
-
 </div>
-
 {% else %}
-<!-- Placeholder when no location exists -->
 <div class="section">
-    <b>Location:</b><br>
+    <strong>Location:</strong><br>
     <em>Press 'Generate Location' to generate a new location.</em>
 </div>
 {% endif %}
 
 <!-- =========================
      RANDOM ENCOUNTER OUTPUT
-     (shared global DC)
      ========================= -->
 <div class="section">
-    <b>Random Encounter:</b><br>
-
+    <strong>Random Encounter:</strong><br>
     {% if latest_encounter %}
-    <b>Trigger:</b> {{ latest_encounter.source }}<br>
-    Rolled {{ format_roll(latest_encounter.raw_roll, latest_encounter.mod) }}
-    vs DC {{ latest_encounter.dc_before }}<br><br>
-    {% if latest_encounter.success %}
-    <b>⚠ A random encounter occurs!</b>
+        <strong>Trigger:</strong> {{ latest_encounter.source }}<br>
+        Rolled {{ format_roll(latest_encounter.raw_roll, latest_encounter.mod) }}
+        vs DC {{ latest_encounter.dc_before }}<br><br>
+        {% if latest_encounter.success %}
+        <strong>⚠ A random encounter occurs!</strong>
+        {% else %}
+        <em>No encounter.</em>
+        {% endif %}
     {% else %}
-    <em>No encounter.</em>
-    {% endif %}
-    {% else %}
-    <em>No encounter check yet.</em>
+        <em>No encounter check yet.</em>
     {% endif %}
 </div>
 
@@ -200,11 +197,10 @@
      ========================= -->
 {% if treasure %}
 <div class="section">
-    <b>Treasure Quality Roll (1d6):</b> {{ treasure.quality_roll }}<br>
-    <b>Number of Items:</b> {{ treasure.number_of_items }}<br>
-    <b>Quality:</b> {{ treasure.quality }}
+    <strong>Treasure Quality Roll (1d6):</strong> {{ treasure.quality_roll }}<br>
+    <strong>Number of Items:</strong> {{ treasure.number_of_items }}<br>
+    <strong>Quality:</strong> {{ treasure.quality }}
     <br><br>
-
     {% for item in treasure.item_list %}
     • {{ item }}<br>
     {% endfor %}
