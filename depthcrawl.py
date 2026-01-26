@@ -202,16 +202,22 @@ def index():
     treasure_dc = session.get("treasure_dc", DEFAULT_TREASURE_DC)
     encounter_dc = session.get("encounter_dc", DEFAULT_ENCOUNTER_DC)
     latest_encounter = session.get("latest_encounter")
-    level = session.get("level", 1)
-    level_modifiers = session.get("level_modifiers", LEVEL_MODIFIERS.get(level, {"wealth": 0, "population": 0}))
+    level = session.get("level")  # may be None
+
+    level_modifiers = (
+        LEVEL_MODIFIERS.get(level, {"wealth": 0, "population": 0})
+        if level is not None
+        else {}
+    )
 
     if request.method == "POST":
         action = request.form.get("action")
         depth = int(request.form.get("depth", depth))
 
         # read level from form or session
-        level = int(request.form.get("level", session.get("level", 1)))
-        level_modifiers = LEVEL_MODIFIERS.get(level, {"wealth": 0, "population": 0})
+        level_raw = request.form.get("level")
+        level = int(level_raw) if level_raw else None
+        level_modifiers = LEVEL_MODIFIERS.get(level, {})
 
         if action == "room":
             used_depth = depth
@@ -231,9 +237,9 @@ def index():
             }
             mods = collect_modifiers(room, trigger="room")
             # add level modifiers
-            mods["treasure_roll"] += level_modifiers["wealth"]
-            mods["treasure_quality"] += level_modifiers["wealth"]
-            mods["encounter_roll"] += level_modifiers["population"]
+            mods["treasure_roll"] += level_modifiers.get("wealth", 0)
+            mods["treasure_quality"] += level_modifiers.get("wealth", 0)
+            mods["encounter_roll"] += level_modifiers.get("population", 0)
 
             # roll encounter (shared DC)
             encounter_dc_before = encounter_dc
@@ -254,9 +260,9 @@ def index():
         elif action == "ransack" and room and not room.get("ransacked"):
             mods = collect_modifiers(room, trigger="ransack")
             # add level modifiers
-            mods["treasure_roll"] += level_modifiers["wealth"]
-            mods["treasure_quality"] += level_modifiers["wealth"]
-            mods["encounter_roll"] += level_modifiers["population"]
+            mods["treasure_roll"] += level_modifiers.get("wealth", 0)
+            mods["treasure_quality"] += level_modifiers.get("wealth", 0)
+            mods["encounter_roll"] += level_modifiers.get("population", 0)
 
             # roll treasure
             treasure_dc_before = treasure_dc
@@ -298,6 +304,8 @@ def index():
             treasure_dc = DEFAULT_TREASURE_DC
             encounter_dc = DEFAULT_ENCOUNTER_DC
             latest_encounter = None
+            level = None
+            level_modifiers = {}
 
         # persist updated session
         session["depth"] = depth
