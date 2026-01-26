@@ -36,6 +36,10 @@
             cursor: not-allowed;
         }
 
+        label {
+            font-weight: bold;
+        }
+
         /* ------------------------
            Form Layout
            ------------------------ */
@@ -62,7 +66,37 @@
             min-width: 120px;
         }
 
-        /* Highlight recent roll */
+        /* ------------------------
+           Status Badges
+           ------------------------ */
+        .badge {
+            display: inline-block;
+            padding: 0.15rem 0.45rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            margin-left: 0.3rem;
+            vertical-align: middle;
+        }
+
+        .badge-success {
+            background: #2e7d32;
+            color: #eaffea;
+        }
+
+        .badge-fail {
+            background: #555;
+            color: #ddd;
+        }
+
+        .badge-warning {
+            background: #b71c1c;
+            color: #ffecec;
+        }
+
+        /* ------------------------
+           Recent Roll Highlight
+           ------------------------ */
         .recent-roll {
             text-decoration: underline;
             font-weight: bold;
@@ -164,7 +198,14 @@
             <span class="recent-roll">
             {{ format_roll(room.ransack_result.raw_roll, room.ransack_result.mod) }}
             </span>
-            vs DC {{ room.ransack_result.treasure_dc_before }}<br><br>
+            vs DC {{ room.ransack_result.treasure_dc_before }}
+
+            {% if room.ransack_result.found_treasure %}
+                <span class="badge badge-success">Success</span>
+            {% else %}
+                <span class="badge badge-fail">Failure</span>
+            {% endif %}
+            <br><br>
 
             {% if room.ransack_result.found_treasure %}
             <strong>Treasure Found!</strong><br>
@@ -204,9 +245,17 @@
         <span class="recent-roll">
         {{ format_roll(latest_encounter.raw_roll, latest_encounter.mod) }}
         </span>
-        vs DC {{ latest_encounter.dc_before }}<br><br>
+        vs DC {{ latest_encounter.dc_before }}
+
         {% if latest_encounter.success %}
-        <strong>⚠ A random encounter occurs!</strong>
+        <span class="badge badge-warning">Encounter</span>
+            {% else %}
+        <span class="badge badge-fail">Safe</span>
+            {% endif %}
+        <br><br>
+
+        {% if latest_encounter.success %}
+        <strong>A random encounter occurs!</strong>
         {% else %}
         <em>No encounter.</em>
         {% endif %}
