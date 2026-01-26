@@ -93,7 +93,7 @@
 {% if level %}
 <div class="section">
     <b>Current Level: {{ level }}</b><br>
-    <b>Level Modifiers:</b>
+    <b>Modifiers:</b>
     {% if level_modifiers %}
         <ul>
         {% for key, value in level_modifiers.items() %}
@@ -117,7 +117,7 @@
 {% if room %}
 <div class="section">
 
-    <b>Used Depth:</b> {{ room.used_depth }}<br><br>
+    <b>Current Depth:</b> {{ room.used_depth }}<br><br>
 
     <!-- Location -->
     <b>Location ({{ room.location_roll }}):</b> {{ room.location }}
