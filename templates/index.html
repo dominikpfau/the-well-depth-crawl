@@ -61,6 +61,20 @@
             flex: 1 1 auto;
             min-width: 120px;
         }
+
+        /* Highlight recent roll */
+        .recent-roll {
+            text-decoration: underline;
+            font-weight: bold;
+            animation: flash 1s ease;
+            animation-fill-mode: forwards;
+        }
+
+        @keyframes flash {
+            0% { background-color: #444; }
+            50% { background-color: #666; }
+            100% { background-color: transparent; }
+        }
     </style>
 </head>
 
@@ -146,14 +160,20 @@
         {% if room.ransack_result.blocked %}
             <em>No treasure can be found here.</em>
         {% else %}
-            Rolled {{ format_roll(room.ransack_result.raw_roll, room.ransack_result.mod) }}
+            Rolled
+            <span class="recent-roll">
+            {{ format_roll(room.ransack_result.raw_roll, room.ransack_result.mod) }}
+            </span>
             vs DC {{ room.ransack_result.treasure_dc_before }}<br><br>
 
             {% if room.ransack_result.found_treasure %}
             <strong>Treasure Found!</strong><br>
-            <strong>Quality:</strong> {{ room.ransack_result.found_treasure.quality }}
+            <strong>Quality:</strong>
+            {{ room.ransack_result.found_treasure.quality }}
+            <span class="recent-roll">
             (Rolled {{ format_roll(room.ransack_result.found_treasure.raw_quality_roll,
                                    room.ransack_result.found_treasure.quality_mod)}})
+            </span>
             <br>
             <strong>Number of Items:</strong> {{ room.ransack_result.found_treasure.number_of_items }}<br><br>
 
@@ -180,7 +200,10 @@
     <strong>Random Encounter:</strong><br>
     {% if latest_encounter %}
         <strong>Trigger:</strong> {{ latest_encounter.source }}<br>
-        Rolled {{ format_roll(latest_encounter.raw_roll, latest_encounter.mod) }}
+        Rolled
+        <span class="recent-roll">
+        {{ format_roll(latest_encounter.raw_roll, latest_encounter.mod) }}
+        </span>
         vs DC {{ latest_encounter.dc_before }}<br><br>
         {% if latest_encounter.success %}
         <strong>⚠ A random encounter occurs!</strong>
@@ -197,10 +220,14 @@
      ========================= -->
 {% if treasure %}
 <div class="section">
-    <strong>Treasure Quality Roll (1d6):</strong> {{ treasure.quality_roll }}<br>
-    <strong>Number of Items:</strong> {{ treasure.number_of_items }}<br>
-    <strong>Quality:</strong> {{ treasure.quality }}
-    <br><br>
+    <strong>Treasure Generated!</strong><br>
+    <strong>Quality:</strong>
+    {{ treasure.quality }}
+    <span class="recent-roll">
+        (Rolled {{ format_roll(treasure.quality_roll, 0)}})
+    </span>
+    <br>
+    <strong>Number of Items:</strong> {{ treasure.number_of_items }}<br><br>
     {% for item in treasure.item_list %}
     • {{ item }}<br>
     {% endfor %}
