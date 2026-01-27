@@ -180,10 +180,14 @@
     <strong>Current Depth:</strong> {{ room.used_depth }}<br><br>
 
     <strong>Location ({{ room.location_roll }}):</strong> {{ room.location }}
-    <pre>{{ room.location_text }}</pre>
+    <div class="location-description">
+        {{ room.location_text | render_md | safe }}
+    </div>
 
     <strong>Detail ({{ room.detail_roll }}):</strong> {{ room.detail }}
-    <pre>{{ room.detail_text }}</pre>
+    <div class="location-description">
+        {{ room.detail_text | render_md | safe }}
+    </div>
 
     <hr>
 

@@ -322,288 +322,554 @@ TREASURE_TABLES = {
 # ----------------------------
 
 LOCATION_DESCRIPTIONS = {
-    "Abandoned Shop": """This place used to sell upmarket goods, but the former owner gave up on that long ago.
+
+    "Abandoned Shop": """
+This place used to sell upmarket goods, but the former owner gave up on that long ago.
+
 The rooms are now filled with dust and junk, but a thorough search might still yield something interesting.
-Add -1 on rolls to find treasure here.""",
 
-    "Administrative Chambers": """A collection of small offices and big typing pools scattered with vast amounts of loose papers.
-If the PCs are looking for information about a specific location, person or event related to the history of this level,
-they might find something. Doing so requires digging through chaotic, rotting documents (difficulty 10).""",
-
-    "Apartments": """A series of small modest apartments. Whoever lived here was doing well enough to afford a home,
-but their lifestyle was anything else than luxurious. Good hiding places, easy to defend,
-but usually only one exit, making them potential deathtraps.""",
-
-    "Auditorium": """A large semi-circular room with a stage at the flat side.
-Around it are rings of benches, each slightly more elevated than the one in front.""",
-
-    "Cistern": """A large basin once used to draw fresh water.
-If the PCs are lucky, they can refill waterskins here.
-The water may also be brackish, contaminated, or the basin dry.""",
-
-    "Crypt": """Large stone sarcophagi are lined up, each labeled with a name.
-The people who got entombed here (or their families) paid considerable fees to avoid public burial.
-Add +1 to rolls on the treasure table.""",
-
-    "Dormitories": """Sparse rooms crammed with bunk beds and little room for privacy or personal belongings.
-These were the homes of the lower working class of the city.
-Add -1 to rolls on the treasure table.""",
-
-    "Fungal Farm": """A cave or former mine repurposed to grow fungi for food, drugs or other products.
-The place is overgrown and jungle-like. The higher the level, the stranger and more exotic the vegetation.
-PCs with farming background may search for edible or medicinal plants.""",
-
-    "Gaming Hall": """A large room filled with gambling tables and strange gaming artifacts.
-There is a good chance to find money or exotic coins here.""",
-
-    "Guild Hall": """A central meeting chamber surrounded by storage and workrooms.
-Narrow stairs lead to a mezzanine once used as an archive or office space. Faded banners show sigils of a forgotten trade guild.
-Choose one of the following options or decide that the nature of the guild  remains a mystery:
-- Artisans guild: Change any treasure found here into rare materials (blocks of marble, petrified woods, rolls of fine cloth) 
-  or drawings of unfinished or masterful works.
-- Farmers guild: Change any treasure found here into seeds, jars of pickled crops or books on farming techniques, crop rotation, or soil health.
-- Mining guild: Change any treasure found here into mining equipment (hammers, pickaxes, lanterns, ropes etc.) 
-  or a map leading to nearby mines.  If appropriate, the map also might contain information about dangers or secret passages there.
-- Painters guild: Change any treasure found here into doses of paint or runebooks""",
-
-    "Laboratory": """A large workshop full of strange apparatuses and exotic equipment (mostly broken). 
-Whatever happened here was already a well-kept secret when the level was still inhabited. 
-Ransacking this place is not without danger, for touching the broken apparatuses might trigger unknown effects, but it is usually worth it. 
-Add +2 to any rolls on the treasure table. Choose one of the following options to determine the original purpose of the location:
-- paint production: Change any consumables rolled on the treasure table into doses of paint. Books do always contain instructions for painting runes. While ransacking, there is a 50% chance the PCs trigger the effect of a random rune on themselves.
-- golem construction (level 5 or higher): Change any consumables rolled on the treasure table into twice the amount in doses of paint. Books do always contain instructions for painting runes. While ransacking, there is a 50% chance that a half assembled construct comes to life and attacks the PCs (Treat it as a rune golem with only 1 action die and 10 resilience).
-- alchemy (level 6 or higher): Any consumables rolled on the treasure table are always potions or ampules. For every generated potion or ampule there's another one still in one of the apparatuses, waiting to be bottled (The PCs can do this if they brought empty vials). While ransacking, there is a 50% chance the PCs trigger the effect of a random ampule on themselves.
-- lesser thaumaturgy (level 8 or higher): Any consumables rolled on the treasure table are always miscellany. There’s a strange compass-like apparatus that will point to a nearby location 1d6 layers deeper, where more consumables can be found (difficulty 10 to navigate there). To activate it, the PCs will need a strong magnet (They can get hints at this if they experiment with it for a while). While ransacking or experimenting with the apparatus, there is a 50% chance that something blows up unexpectedly (Treat this like a “fragile” location).
-- greater thaumaturgy (level 11 or higher): Rolls on the treasure table always produce at least 1 permanent artifact. Ignore anything else from the bonus column. While ransacking, there is a 50% chance that the PCs trigger some effect that attracts nearby undead (roll up a random encounter). This is in addition to any normal random encounters that would happen during this period.""",
-
-    "Library": """Books are extremely precious and thus rarely left behind. 
-Still, no gravedigger would pass the opportunity to search through the crumbled shelves, for the promise of valuable loot 
-(and ancient knowledge) is too tempting. Add +2 to all rolls on the treasure table, but ignore any consumables from the bonus column (except paint).""",
-
-    "Lighted Farm": """A large cave or former mine shaft that was used to raise valuable crops and livestock with the help of artificial light. 
-In central places one can still see where the magic runes used to be. Now, without the light, it's a place of darkness and decay, 
-since most light-dependent plants died long ago.""",
-
-    "Mansion": """Entrance to a sprawling upper-class mansion.
-Whoever lived here belonged to the upper class of his time. Immediately roll 1d3+1 and generate that many interconnected 
-locations within the current depth, using the following special table (roll 1d6 and reroll on duplicates):
-1. Cistern, with fresh water supply
-2. Library, with +1 to find treasure
-3. Lounge: treat like Suits location with Bulky Treasure detail
-4. Mausoleum, with +1 to find treasure
-5. Treasury: treat like Vault and Treasure Pile details combined. Add +3 to any rolls on the treasure table
-6. Pleasure garden: treat like Public Fungal Garden with +1 to find treasure
+**Add −1 on rolls to find treasure here.**
 """,
 
-    "Manufactory": """A sprawling structure with rows of workbenches.
-Storage rooms contain raw materials and finished goods.""",
+    "Administrative Chambers": """
+A collection of small offices and big typing pools scattered with vast amounts of loose papers.
 
-    "Market": """An open area filled with the remnants of stalls—stone counters, rotting crates, and tarnished scales. 
-Alcoves, where merchants once displayed their wares, are now littered with broken pottery and scraps of faded cloth.""",
+If the PCs are looking for information about a specific location, person, or event related to the history of this level, they might find something.
 
-    "Mausoleum": """One or several richly ornamented stone sarcophagi are placed inside a spacious chamber. 
-Elaborated mural reliefs and paintings might give clues about the deceased person or family, which obviously was extremely wealthy 
-to afford such a fancy last resting place. Add +2 to any rolls on the treasure table.""",
+Doing so requires digging through chaotic, rotting documents (**difficulty 10**).
+""",
 
-    "Mine": """Most spaces used to be mines at some point, but were extended and adjusted to a new purpose eventually. 
-This one was still mined from, at the time when people abandoned this level. 
-There's a 1 in 3 chance that some valuable ore vein can be found here (otherwise it's something mundane like coal). 
-Roll on the treasure table and replace any improper result by larger amounts if something less valuable. 
-Removing it requires time and a pickaxe.""",
+    "Apartments": """
+A series of small modest apartments.
 
-    "Ossuary": """A storage room crammed with bones in every corner, maybe even up to the ceiling. 
-Whoever found their final rest here was either a beggar or criminal (or both). 
-Add -2 to any rolls on the treasure table, but +2 to any rolls for random encounters.""",
+Whoever lived here was doing well enough to afford a home, but their lifestyle was anything else than luxurious.
 
-    "Public Fungal Garden": """An eerie expanse of bioluminescent mushrooms and twisted fungi that have been untended for decades. 
-Stone pathways wind through the garden, now overgrown with moss and vines. 
-There is a 50% chance that the place bears an additional detail. Choose one of the following options:
-- glowing mushrooms: the area is well lit.
-- hedge maze: treat like “labyrinthine” detail
-- overgrown: treat like “obscured” detail
-- slime fungus: treat like that very detail
-- spore cloud: treat like “mine damp” detail""",
+Good hiding places, easy to defend, but usually only one exit — making them potential deathtraps.
+""",
 
-    "Public Rock Garden": """A public place elaborately decorated with rocks, stones and gravel, sometimes with additional planting in between. 
-In former times (i.e. on level 6 or higher), people even mastered the art of artificial crystal growth which resulted in the most breathtaking displays. 
-There's a 1 in 3 chance that something valuable can be obtained from here, with a pickaxe or similar and some time.""",
+    "Auditorium": """
+A large semi-circular room with a stage at the flat side.
 
-    "Sculpture Gallery": """A vast, echoing hall with high, crumbling walls, its once-pristine marble floors now cracked and uneven. 
-Dust clings to the remnants of broken statues, some toppled, others half-eroded by time. 
-There are 1d6 intact sculptures, just waiting to be toppled over on unwary enemies.""",
+Around it are rings of benches, each slightly more elevated than the one in front.
+""",
 
-    "Slum": """A maze of narrow, crooked alleys choked with rubble and refuse. 
-Only the indigent lived here. Add -2 on rolls to find treasure here and ignore any further bonuses on the roll. 
-If you roll up a detail that includes treasure (bulky treasure, portcullis, treasure pile), change it into something mundane.""",
+    "Cistern": """
+A large basin once used to draw fresh water.
 
-    "Storehouse": """A cavernous, dark space with rows of shelves and crates, many of them collapsed under the weight of time. 
-Scattered barrels and sacks spill their long-rotted contents across the stone floor. 
-There is probably not much left of value here, unless the place was left in haste. 
-Choose one of the following options (or roll 1d6) for something to find while ransacking: 
-1. Preserved goods: Salted or dried food in sealed barrels, possibly still edible.
-2. Raw materials: Bolts of cloth, spools of rope, or planks of wood.
-3. Tools: Hammers, nails, or other equipment for loading and repairs.
-4. Containers: Empty barrels, crates, or sacks that could be repurposed.
-5. Records: Shipping manifests or ledgers that hint on nearby locations.
-6. Hidden stashes: Forgotten valuables, such as coins or luxury goods, tucked away in overlooked corners. Roll for something on the treasure table.""",
+If the PCs are lucky, they can refill waterskins here.
 
-    "Suites": """A cluster of dignified dwellings, the doorways arched and adorned with faded carvings. 
-A communal well sits at the center, now dry and clogged with debris. Most sites still have some degree of furniture and are usually well defensible. 
-If the PCs rest here, they don't get the usual -1 on their roll for stress reduction.""",
+The water may also be brackish, contaminated, or the basin dry.
+""",
 
-    "Tavern": """A once-welcoming facade now marred by cracks and creeping moss. 
-Inside, the stone floor is littered with broken tables and overturned chairs. 
-There's a 50% chance that one of the casks still contains 1d6 doses of booze.""",
+    "Crypt": """
+Large stone sarcophagi are lined up, each labeled with a name.
 
-    "Temple": """Walls adorned with faded carvings of family trees and solemn faces. 
-Niches hold crumbling urns and plaques etched with ancestral names, some toppled and broken on the stone floor. 
-A central shrine, once the focus of rituals, stands chipped and empty, surrounded by scattered offerings of dried cave flowers, burnt incense sticks, and rusted heirlooms. 
-There is a strong taboo against ransacking these sacred places of ancestral worship, but what happens upwell usually stays upwell. 
-If the PCs choose to do so, they get +1 for any rolls on the treasure table, but you also add +1 on the roll for a random encounter.""",
+The people who got entombed here (or their families) paid considerable fees to avoid public burial.
 
-    "Wellguard Station": """A compact, sturdy structure. Inside, the main room holds a long table, surrounded by broken chairs. 
-Rusted weapon racks stand empty or with a few forgotten spears and swords, their blades dulled by time. 
-Roll 1d6 for something intact to find while ransacking:
-1. Sword
-2. Shield
-3. Spear
-4. Cuirass and hauberk
-5. Chain (5m)
-6. Set of dice""",
+**Add +1 to rolls on the treasure table.**
+""",
 
-    "Workshop": """A cluttered, shadow-filled space with heavy workbenches covered in rusted tools and half-finished projects. 
-Shelves sag under the weight of dusty jars, while broken crates spill their contents across the floor. 
-Choose one of the following options or roll 1d6 to determine what kind of craftsman had his workplace here:
-1. Blacksmith
-2. Carpenter
-3. Stonemason
-4. Weaver
-5. Potter
-6. Bookbinder""",
+    "Dormitories": """
+Sparse rooms crammed with bunk beds and little room for privacy or personal belongings.
+
+These were the homes of the lower working class of the city.
+
+**Add −1 to rolls on the treasure table.**
+""",
+
+    "Fungal Farm": """
+A cave or former mine repurposed to grow fungi for food, drugs, or other products.
+
+The place is overgrown and jungle-like. The higher the level, the stranger and more exotic the vegetation.
+
+PCs with a farming background may search for edible or medicinal plants.
+""",
+
+    "Gaming Hall": """
+A large room filled with gambling tables and strange gaming artifacts.
+
+There is a good chance to find money or exotic coins here.
+""",
+
+    "Guild Hall": """
+A central meeting chamber surrounded by storage and workrooms.
+
+Narrow stairs lead to a mezzanine once used as an archive or office space. Faded banners show sigils of a forgotten trade guild.
+
+Choose one of the following options, or decide that the nature of the guild remains a mystery:
+
+- **Artisans guild**: Change any treasure found here into rare materials (blocks of marble, petrified woods, rolls of fine cloth) or drawings of unfinished or masterful works.
+- **Farmers guild**: Change any treasure found here into seeds, jars of pickled crops, or books on farming techniques, crop rotation, or soil health.
+- **Mining guild**: Change any treasure found here into mining equipment (hammers, pickaxes, lanterns, ropes, etc.) or a map leading to nearby mines. If appropriate, the map may also contain information about dangers or secret passages.
+- **Painters guild**: Change any treasure found here into doses of paint or runebooks.
+""",
+
+    "Laboratory": """
+A large workshop full of strange apparatuses and exotic equipment (mostly broken).
+
+Whatever happened here was already a well-kept secret when the level was still inhabited.
+
+Ransacking this place is not without danger, for touching the broken apparatuses might trigger unknown effects — but it is usually worth it.
+
+**Add +2 to any rolls on the treasure table.**
+
+Choose one of the following options to determine the original purpose of the location:
+
+- **Paint production**: Change any consumables rolled on the treasure table into doses of paint. Books always contain instructions for painting runes. While ransacking, there is a **50% chance** the PCs trigger the effect of a random rune on themselves.
+- **Golem construction (level 5 or higher)**: Change any consumables rolled into twice the amount in doses of paint. While ransacking, there is a **50% chance** a half-assembled construct comes to life and attacks the PCs (treat it as a rune golem with only 1 action die and 10 resilience).
+- **Alchemy (level 6 or higher)**: Consumables are always potions or ampules. For every generated potion or ampule, another one remains in an apparatus, ready to be bottled. While ransacking, there is a **50% chance** the PCs trigger the effect of a random ampule.
+- **Lesser thaumaturgy (level 8 or higher)**: Consumables are always miscellany. A strange compass-like apparatus points to a nearby location 1d6 layers deeper (difficulty 10 to navigate). While ransacking or experimenting, there is a **50% chance** something blows up unexpectedly (treat as a *fragile* location).
+- **Greater thaumaturgy (level 11 or higher)**: Rolls always produce at least **1 permanent artifact**. Ignore anything else from the bonus column. While ransacking, there is a **50% chance** of attracting nearby undead (roll a random encounter), in addition to normal encounters.
+""",
+
+    "Library": """
+Books are extremely precious and thus rarely left behind.
+
+Still, no gravedigger would pass the opportunity to search through the crumbled shelves, for the promise of valuable loot — and ancient knowledge — is too tempting.
+
+**Add +2 to all rolls on the treasure table**, but ignore any consumables from the bonus column (except paint).
+""",
+
+    "Lighted Farm": """
+A large cave or former mine shaft used to raise valuable crops and livestock with the help of artificial light.
+
+In central places, one can still see where the magic runes used to be.
+
+Now, without the light, it is a place of darkness and decay, since most light-dependent plants died long ago.
+""",
+
+    "Mansion": """
+Entrance to a sprawling upper-class mansion.
+
+Whoever lived here belonged to the upper class of their time.
+
+Immediately roll **1d3 + 1** and generate that many interconnected locations within the current depth, using the following special table (roll 1d6 and reroll duplicates):
+
+1. Cistern, with fresh water supply  
+2. Library, with +1 to find treasure  
+3. Lounge (treat like *Suites* with *Bulky Treasure* detail)  
+4. Mausoleum, with +1 to find treasure  
+5. Treasury (treat like *Vault* and *Treasure Pile* combined; **+3 to treasure rolls**)  
+6. Pleasure garden (treat like *Public Fungal Garden* with +1 to find treasure)
+""",
+
+    "Manufactory": """
+A sprawling structure with rows of workbenches.
+
+Storage rooms contain raw materials and finished goods.
+""",
+
+    "Market": """
+An open area filled with the remnants of stalls — stone counters, rotting crates, and tarnished scales.
+
+Alcoves where merchants once displayed their wares are now littered with broken pottery and scraps of faded cloth.
+""",
+
+    "Mausoleum": """
+One or several richly ornamented stone sarcophagi are placed inside a spacious chamber.
+
+Elaborate mural reliefs and paintings might give clues about the deceased person or family, who must have been extremely wealthy.
+
+**Add +2 to any rolls on the treasure table.**
+""",
+
+    "Mine": """
+Most spaces used to be mines at some point, but were later extended and adjusted to a new purpose.
+
+This one was still actively mined when the level was abandoned.
+
+There is a **1 in 3 chance** that a valuable ore vein can be found here (otherwise something mundane like coal).
+
+Roll on the treasure table and replace improper results with larger quantities of something less valuable.
+
+Removing it requires time and a pickaxe.
+""",
+
+    "Ossuary": """
+A storage room crammed with bones in every corner, maybe even up to the ceiling.
+
+Whoever found their final rest here was either a beggar, a criminal — or both.
+
+**Add −2 to rolls on the treasure table**, but **+2 to rolls for random encounters.**
+""",
+
+    "Public Fungal Garden": """
+An eerie expanse of bioluminescent mushrooms and twisted fungi, untended for decades.
+
+Stone pathways wind through the garden, now overgrown with moss and vines.
+
+There is a **50% chance** the place bears an additional detail. Choose one:
+
+- Glowing mushrooms (the area is well lit)
+- Hedge maze (treat like *labyrinthine*)
+- Overgrown (treat like *obscured*)
+- Slime fungus (treat like that detail)
+- Spore cloud (treat like *mine damp*)
+""",
+
+    "Public Rock Garden": """
+A public place elaborately decorated with rocks, stones, and gravel, sometimes with additional planting.
+
+In former times (level 6 or higher), artificial crystal growth produced breathtaking displays.
+
+There is a **1 in 3 chance** that something valuable can be extracted with time and a pickaxe.
+""",
+
+    "Sculpture Gallery": """
+A vast, echoing hall with high, crumbling walls and cracked marble floors.
+
+Dust clings to broken statues, some toppled, others half-eroded by time.
+
+There are **1d6 intact sculptures**, waiting to be toppled onto unwary enemies.
+""",
+
+    "Slum": """
+A maze of narrow, crooked alleys choked with rubble and refuse.
+
+Only the indigent lived here.
+
+**Add −2 to rolls to find treasure** and ignore any further bonuses.
+
+If a detail includes treasure (bulky treasure, portcullis, treasure pile), replace it with something mundane.
+""",
+
+    "Storehouse": """
+A cavernous space with rows of shelves and crates, many collapsed under the weight of time.
+
+Scattered barrels and sacks spill their long-rotted contents across the floor.
+
+Choose one of the following options (or roll 1d6) when ransacking:
+
+1. Preserved goods (salted or dried food, possibly edible)
+2. Raw materials (cloth, rope, planks)
+3. Tools (hammers, nails, loading equipment)
+4. Containers (barrels, crates, sacks)
+5. Records (shipping manifests or ledgers)
+6. Hidden stashes (roll on the treasure table)
+""",
+
+    "Suites": """
+A cluster of dignified dwellings with arched doorways and faded carvings.
+
+A communal well sits at the center, now dry and clogged.
+
+Most sites retain some furniture and are usually well defensible.
+
+If the PCs rest here, they **do not suffer the usual −1** on stress reduction rolls.
+""",
+
+    "Tavern": """
+A once-welcoming facade now marred by cracks and creeping moss.
+
+Inside, broken tables and overturned chairs litter the stone floor.
+
+There is a **50% chance** that one cask still contains **1d6 doses of booze**.
+""",
+
+    "Temple": """
+ Walls adorned with faded carvings of family trees and solemn faces.
+
+ Niches hold crumbling urns and plaques etched with ancestral names, some toppled and broken on the stone floor.
+
+ A central shrine, once the focus of rituals, stands chipped and empty, surrounded by scattered offerings of dried cave flowers, burnt incense sticks, and rusted heirlooms.
+
+ There is a strong taboo against ransacking these sacred places of ancestral worship, but what happens upwell usually stays upwell.
+
+ If the PCs choose to do so, they get **+1 on any rolls on the treasure table**, but you also add **+1 on the roll for a random encounter**.
+ """,
+
+    "Wellguard Station": """
+ A compact, sturdy structure.
+
+ Inside, the main room holds a long table, surrounded by broken chairs.
+
+ Rusted weapon racks stand empty or hold a few forgotten spears and swords, their blades dulled by time.
+
+ Roll **1d6** for something intact to find while ransacking:
+
+ 1. Sword  
+ 2. Shield  
+ 3. Spear  
+ 4. Cuirass and hauberk  
+ 5. Chain (5 m)  
+ 6. Set of dice
+ """,
+
+    "Workshop": """
+ A cluttered, shadow-filled space with heavy workbenches covered in rusted tools and half-finished projects.
+
+ Shelves sag under the weight of dusty jars, while broken crates spill their contents across the floor.
+
+ Choose one of the following options, or roll **1d6**, to determine what kind of craftsman had his workplace here:
+
+ 1. Blacksmith  
+ 2. Carpenter  
+ 3. Stonemason  
+ 4. Weaver  
+ 5. Potter  
+ 6. Bookbinder
+ """,
 }
 
 DETAIL_DESCRIPTIONS = {
 
-    "Amphoras": """The location is crammed with large pieces of sealed crockery. 
-They might contain organic goods (most likely rotten) or mortal remains. 
-The PCs can choose to smash them while ransacking for a +1 bonus to find treasure, 
-but the noise might attract something unwanted (+1 on roll for random encounter).""",
+    "Amphoras": """
+The location is crammed with large pieces of sealed crockery.
 
-    "Blocked Exit": """The only other exit of this location is blocked. 
+They might contain organic goods (most likely rotten) or mortal remains.
+
+The PCs can choose to smash them while ransacking for a **+1 bonus to find treasure**, but the noise might attract something unwanted (**+1 on the roll for a random encounter**).
+""",
+
+    "Blocked Exit": """
+The only other exit of this location is blocked.
+
 Choose one of the following:
-- It is a light door that was barricaded, maybe even nailed up with furniture from the side the PCs are on. It can be cleared easily, but is that a good idea? If the PCs choose to go deeper from here, add +1 to the next random encounter check.
-- It is a strong door with an iron lock. If the PCs want to go deeper from here, they have to find a way to open it first. While ransacking the location, they have a 1 in 6 chance to find the key.
-- It is a simple passage that became overgrown with fungal weeds. The PCs can hack or burn their way through, but whatever waits in the next room might have a walk-over ambushing them. They get a -1 to awareness and stealth while going deeper from here. You should consider adding the 'obscured' detail to the next location.""",
 
-    "Bulky Treasure": """The location contains something valuable that is hard to move. 
-It might be some lavish piece of furniture, huge ornate rug or musical instrument. 
-Pick something from the treasure table that is appropriate for the current level. 
-If a PC wants to carry it along, they can’t take any other actions while moving between locations from now on. 
-The next time the group is fleeing from a fight, they have to leave the item behind.""",
+- **Barricaded door:**  
+  A light door that was barricaded, maybe even nailed up with furniture from the side the PCs are on. It can be cleared easily, but is that a good idea?  
+  If the PCs choose to go deeper from here, add **+1 to the next random encounter check**.
 
-    "Chandelier": """A large chandelier is hanging from the ceiling, held up by an old rusty chain, fixed to one of the walls. 
-A decent hit will cause it to fall, knocking down anything underneath, causing 1d6 damage.""",
+- **Locked door:**  
+  A strong door with an iron lock. If the PCs want to go deeper from here, they have to find a way to open it first.  
+  While ransacking the location, they have a **1 in 6 chance to find the key**.
 
-    "Crevice": """The location is split in half. 
-A PC can simply leap over it, but in the heat of a fight it might require a difficulty 5 roll to not trip. 
-There's a 1 in 3 chance that something valuable lies at the bottom of the crevice (roll on the treasure table).""",
+- **Overgrown passage:**  
+  A simple passage that became overgrown with fungal weeds. The PCs can hack or burn their way through, but whatever waits in the next room might ambush them.  
+  They get **−1 to awareness and stealth** while going deeper from here. Consider adding the *obscured* detail to the next location.
+""",
 
-    "Dead End": """The location forms a dead end, from which the PCs have to backtrack. 
-There is no way to go deeper from here.""",
+    "Bulky Treasure": """
+The location contains something valuable that is hard to move.
 
-    "Dead Gravedigger": """It might be someone the PCs know from Bastion (maybe they even came to search for them) or someone who's been lying here for centuries. 
-If the PCs search the body, roll a d6 to see what they find: 
-1. rotten food
-2. two torches 
-3. booze
-4. half finished letter (to someone who might be long dead)
-5. minor piece of treasure
-6. map to a random location or some hidden treasure""",
+It might be a lavish piece of furniture, a huge ornate rug, or a musical instrument.
 
-    "Fireplace": """The location contains a large built-in fireplace, maybe with a bucket of coal nearby. 
-The chimney leads to some kind of ventilation system, from which at least one other location is reachable. 
-If the PCs want to climb up the chimney, they can use it to travel between any existing locations that have been generated with a fireplace. 
-If no such place exists yet, instead they find a new location with a fireplace.""",
+Pick something from the treasure table that is appropriate for the current level.
 
-    "Fragile": """Parts of the location are structurally weak and in danger of collapsing. 
-PCs who succeeded with their roll on awareness notice this. If the group ransacks the location (or interacts with it in any other way), something bad happens. 
+If a PC wants to carry it along, they can’t take any other actions while moving between locations from now on.
+
+The next time the group is fleeing from a fight, they have to leave the item behind.
+""",
+
+    "Chandelier": """
+A large chandelier is hanging from the ceiling, held up by an old rusty chain fixed to one of the walls.
+
+A decent hit will cause it to fall, knocking down anything underneath and causing **1d6 damage**.
+""",
+
+    "Crevice": """
+The location is split in half.
+
+A PC can simply leap over it, but in the heat of a fight it might require a **difficulty 5 roll** to not trip.
+
+There is a **1 in 3 chance** that something valuable lies at the bottom of the crevice (roll on the treasure table).
+""",
+
+    "Dead End": """
+The location forms a dead end, from which the PCs have to backtrack.
+
+There is no way to go deeper from here.
+""",
+
+    "Dead Gravedigger": """
+It might be someone the PCs know from Bastion (maybe they even came to search for them) or someone who's been lying here for centuries.
+
+If the PCs search the body, roll **1d6** to see what they find:
+
+1. Rotten food  
+2. Two torches  
+3. Booze  
+4. Half-finished letter (to someone who might be long dead)  
+5. Minor piece of treasure  
+6. Map to a random location or some hidden treasure
+""",
+
+    "Fireplace": """
+The location contains a large built-in fireplace, maybe with a bucket of coal nearby.
+
+The chimney leads to some kind of ventilation system, from which at least one other location is reachable.
+
+If the PCs want to climb up the chimney, they can use it to travel between any existing locations that have been generated with a fireplace.
+
+If no such place exists yet, instead they find a new location with a fireplace.
+""",
+
+    "Fragile": """
+Parts of the location are structurally weak and in danger of collapsing.
+
+PCs who succeed on an awareness roll notice this. If the group ransacks the location (or interacts with it in any other way), something bad happens.
+
 Choose one of the following:
-- Collapsing ceiling: everyone in the room suffers 1d6+1 damage from falling stones. Dodging it is difficulty 5. Halve rolls for any attempt to defend from it without a shield (or anything alike).
-- Collapsing entrance: the way back is blocked. Unless the PCs have any tools to actually dig through (which takes time), they cannot go back anymore from here. Erase one of the entrances to this location.
-- Collapsing floor: the PCs suffer 1d6 damage from falling (armor doesn't help) and are now effectively in another room. Unless they have climbing tools, they cannot backtrack from here and are effectively lost. Roll up a new location 1d6 layers deeper.""",
 
-    "Holes": """The walls are perforated with small cracks and holes. 
-They seem to lead to other nearby locations but are too tight for a human to squeeze through. 
-Bats, Spiders, Tangles (and other small things) fit through though and can thus ambush easily. 
-As long as the PCs stay here, they will automatically be surprised if encountering any of these creatures.""",
+- **Collapsing ceiling:**  
+  Everyone in the room suffers **1d6+1 damage** from falling stones. Dodging is **difficulty 5**.  
+  Halve rolls for any attempt to defend without a shield (or similar).
 
-    "Inactive Rune": """The magic faded away long ago, but it is still clearly visible. With a dose of paint, it can be reactivated. 
-Roll a d6 to choose the type of rune:
-1. annul
-2. burn
-3. light
-4. purify
-5. reveal magic
-6. scry (shows some undiscovered place. Roll up a new location 1d6 layers deeper)""",
+- **Collapsing entrance:**  
+  The way back is blocked. Unless the PCs have tools to dig through (which takes time), they cannot go back.  
+  Erase one of the entrances to this location.
 
-    "Labyrinthine": """The location is part of a larger complex of maze-like corridors, intersections and secluded dead ends. 
-Going deeper from here requires a difficulty 5 navigation check. On a failure, the PCs are immediately lost.""",
+- **Collapsing floor:**  
+  The PCs suffer **1d6 damage** from falling (armor doesn’t help) and are now in another room.  
+  Unless they have climbing tools, they cannot backtrack and are effectively lost.  
+  Roll a new location **1d6 layers deeper**.
+""",
 
-    "Lift": """The location contains a lift consisting of a crank, iron cage and counterweight. 
-The iron chains seem to be in okayish condition but the turning mechanism is jammed. A difficulty 5 roll can fix it so it can be used again. 
-The lift shaft connects to a place 1d6 layers deeper (or less deep, if the current depth is greater 5). 
-If the PCs want to use the lift, they have to leave someone behind to operate the crank. Roll up a new location if they do. """,
+    "Holes": """
+The walls are perforated with small cracks and holes.
 
-    "Looted": "Somebody has been here before and turned the place upside down. There is no treasure to be found here.",
+They lead to nearby locations but are too tight for a human to squeeze through.
 
-    "Mine Damp": """The location is filled with dangerous gas. 
-A PC with a mining background will notice the signs early, others might wander into this danger carelessly. 
+Bats, spiders, tangles, and other small creatures can fit through and ambush easily.
+
+As long as the PCs stay here, they are automatically surprised by these creatures.
+""",
+
+    "Inactive Rune": """
+The magic faded away long ago, but the rune is still clearly visible. With a dose of paint, it can be reactivated.
+
+Roll **1d6** to choose the type of rune:
+
+1. Annul  
+2. Burn  
+3. Light  
+4. Purify  
+5. Reveal magic  
+6. Scry (shows an undiscovered place; roll a new location **1d6 layers deeper**)
+""",
+
+    "Labyrinthine": """
+The location is part of a larger complex of maze-like corridors, intersections, and secluded dead ends.
+
+Going deeper from here requires a **difficulty 5 navigation check**. On a failure, the PCs are immediately lost.
+""",
+
+    "Lift": """
+The location contains a lift consisting of a crank, iron cage, and counterweight.
+
+The iron chains are in acceptable condition, but the turning mechanism is jammed. A **difficulty 5 roll** can fix it.
+
+The lift shaft connects to a place **1d6 layers deeper** (or less deep if the current depth is greater than 5).
+
+To use the lift, someone must stay behind to operate the crank. Roll up a new location if they do.
+""",
+
+    "Looted": """
+Somebody has been here before and turned the place upside down.
+
+There is no treasure to be found here.
+""",
+
+    "Mine Damp": """
+The location is filled with dangerous gas.
+
+A PC with a mining background notices the signs early; others might wander in carelessly.
+
 Choose one of the following:
-- Choke damp: torches extinguish on entering and stuff like burn runes or fire ampules might not work as expected. Staying here reduces the resilience of every living thing by 2 points per full exploration round (treat this like a minor complication).
-- Stink damp: the sickening smell of rotten eggs gives all living creatures a -2 penalty to all actions and causes one point of stress per full exploration round spent here.
-- Fire damp: torches flare up on entering and eventually cause an explosion that deals 2d6 fire damage to everything near. The sound of the detonation will attract anything nearby. Roll for a random encounter immediately.""",
 
-    "Note": """A previous visitor has written something. It might be a small paper note or graffiti on the wall. 
-The note contains information useful for gravediggers, either about nearby threats, valuables or some general information about the current level or a specific type of monster.""",
+- **Choke damp:**  
+  Torches extinguish on entering. Fire-based effects might fail.  
+  Staying here reduces resilience of all living creatures by **2 per exploration round**.
 
-    "Obscured": """The location is thick with cobwebs or fungi sprawling in every corner. 
-The PCs get a -1 on rolls to notice threats but +1 to be stealthy while inside.""",
+- **Stink damp:**  
+  The smell gives **−2 to all actions** and causes **1 stress per exploration round**.
 
-    "Portcullis": """The location lies behind a huge portcullis. 
-PCs can see what's on the other side but have to pick the lock or break it down to be able to reach it. 
-Roll on the treasure table for something that is placed inside the location, clearly visible from outside.""",
+- **Fire damp:**  
+  Torches flare and cause an explosion dealing **2d6 fire damage**.  
+  The noise attracts nearby threats. Roll a random encounter immediately.
+""",
 
-    "Repurposed into Crypt": """Whatever this location used to be, at some point it was repurposed into a public crypt. 
-Dozens of corpses fill the room, mostly in cheap caskets. Ignore any bonuses to rolls on the treasure table from the location.""",
+    "Note": """
+A previous visitor has written something—either a paper note or graffiti on the wall.
 
-    "Safe": """A small locked safe is integrated in one of the walls. 
-Picking the lock is time consuming, but brute force likely won't get you anywhere (halve rolls for that). 
-If the PCs manage to open it, roll for treasure as if they were ransacking the location. If there's no treasure, put something mundane inside, like business or legal papers.""",
+It contains information useful for gravediggers about nearby threats, valuables, or the history of the level.
+""",
 
-    "Secret Passage": """A secret passage is hidden behind some unobtrusive architectural feature (fireplace, shelf, wall relief) and can be found while ransacking the place. 
-It either connects to a previously explored location (less deep than the current one) or leads to a new location 1d6 layers deeper.""",
+    "Obscured": """
+The location is thick with cobwebs or sprawling fungi.
 
-    "Signpost": """The location contains a partially destroyed map or signpost that once gave directions for the immediate neighborhood. 
-The PCs get a +1 for their next exploration roll starting from this location.""",
+PCs get **−1 to notice threats**, but **+1 to stealth** while inside.
+""",
 
-    "Signs of Recent Passage": """Something was here not long ago. 
-Roll on the encounter table to determine who or what left its mark on the location. 
-It could be footprints, an abandoned campsite (from exiles or gravediggers), webs from crypt spiders or the disfigured remains of a monster's last victim. 
-The next random encounter near this location should be with that creature.""",
+    "Portcullis": """
+The location lies behind a huge portcullis.
 
-    "Slime Fungus": """The floor is extremely sticky, producing a smacking sound with every footstep. 
-All creatures move as if suffering from a minor leg wound, unless they are flying or climbing the ceiling.""",
+PCs can see what’s on the other side but must pick the lock or break it down to enter.
 
-    "Treasure Pile": """Something valuable lies here, in plain sight, which should make every gravedigger suspicious. 
-Roll on the treasure table for something that is placed inside the location. The first time you roll for a random encounter here, add +1. 
-Whatever the PCs might encounter is guarding the treasure, potentially trying to lure them into an ambush.""",
+Roll on the treasure table for something placed inside, clearly visible from outside.
+""",
 
-    "Vault": """The location is locked behind a strong iron or stone door. 
-The PCs cannot see what's inside, but there might be some weathered sign nearby, giving them a hint. 
-To get in, the PCs have to pick the lock or come up with some other method. Let the players halve their rolls for any attempt that relies on brute force. 
-Inside the vault, PCs get a +1 to find treasure.""",
+    "Repurposed into Crypt": """
+Whatever this location used to be, it was repurposed into a public crypt.
 
-    "Vermin": """The place is crawling with rats or bugs.""",
+Dozens of corpses fill the room, mostly in cheap caskets.
 
-    "Wet": """Water drips from the ceiling, forming big puddles on the floor. Every surface is damp.""",
+Ignore any bonuses to treasure rolls from the location.
+""",
+
+    "Safe": """
+A small locked safe is integrated into one of the walls.
+
+Picking the lock is time-consuming; brute force is ineffective (halve rolls for it).
+
+If opened, roll for treasure as if ransacking the location.  
+If no treasure is found, place something mundane inside (e.g. business or legal papers).
+""",
+
+    "Secret Passage": """
+A secret passage is hidden behind an unobtrusive architectural feature and can be found while ransacking.
+
+It either connects to a previously explored, less-deep location or leads to a new location **1d6 layers deeper**.
+""",
+
+    "Signpost": """
+The location contains a partially destroyed map or signpost.
+
+PCs get **+1 on their next exploration roll** starting from this location.
+""",
+
+    "Signs of Recent Passage": """
+Something was here not long ago.
+
+Roll on the encounter table to determine what left its mark.
+
+The next random encounter near this location should involve that creature.
+""",
+
+    "Slime Fungus": """
+The floor is extremely sticky, producing a smacking sound with every step.
+
+All creatures move as if suffering a minor leg wound unless flying or ceiling-climbing.
+""",
+
+    "Treasure Pile": """
+Something valuable lies here in plain sight—making every gravedigger suspicious.
+
+Roll on the treasure table for the item.
+
+The first random encounter rolled here gets **+1**.
+
+Whatever appears is guarding the treasure and may attempt an ambush.
+""",
+
+    "Vault": """
+The location is locked behind a strong iron or stone door.
+
+PCs cannot see inside, but a weathered sign might give a hint.
+
+To enter, the lock must be picked or bypassed.  
+Halve rolls relying on brute force.
+
+Inside, PCs get **+1 to find treasure**.
+""",
+
+    "Vermin": """
+The place is crawling with rats or bugs.
+""",
+
+    "Wet": """
+Water drips from the ceiling, forming large puddles on the floor.
+
+Every surface is damp.
+""",
 }

@@ -1,3 +1,4 @@
+import markdown
 import math
 import random
 
@@ -185,8 +186,12 @@ def format_modifier(mod):
     sign = "+" if mod is None or mod >= 0 else "−"
     return f"{sign}{abs(mod)}"
 
+def render_md(text):
+    return markdown.markdown(text)
+
 app.jinja_env.globals["format_roll"] = format_roll
 app.jinja_env.globals["format_modifier"] = format_modifier
+app.jinja_env.filters["render_md"] = render_md
 
 
 # ----------------------------
