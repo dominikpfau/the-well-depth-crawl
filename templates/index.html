@@ -198,7 +198,7 @@
         Level {{ level }} · Depth {{ room.used_depth }}
         {% for key, value in level_modifiers.items() %}
             {% if value != 0 %}
-                <span class="meta-badge {% if value > 0 %}positive{% else %}negative{% endif %}">
+                <span class="meta-badge {{ get_modifier_badge_class(key, value) }}">
                     {{ key.replace("_", " ").title() }} {{ format_modifier(value) }}
                 </span>
             {% endif %}

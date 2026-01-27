@@ -174,6 +174,9 @@ def roll_random_encounter(current_dc: int, mods: dict):
             "next_dc": next_dc,
         }
 
+# ----------------------------
+# UI LOGIC
+# ----------------------------
 
 def format_roll(raw, mod):
     if mod is None or mod == 0:
@@ -189,9 +192,20 @@ def format_modifier(mod):
 def render_md(text):
     return markdown.markdown(text)
 
+
+def get_modifier_badge_class(key: str, value: int) -> str:
+    if value == 0:
+        return ""  # no badge needed
+
+    if key == "population":
+        return "negative" if value > 0 else "positive"
+    else:
+        return "positive" if value > 0 else "negative"
+
 app.jinja_env.globals["format_roll"] = format_roll
 app.jinja_env.globals["format_modifier"] = format_modifier
 app.jinja_env.filters["render_md"] = render_md
+app.jinja_env.globals["get_modifier_badge_class"] = get_modifier_badge_class
 
 
 # ----------------------------
