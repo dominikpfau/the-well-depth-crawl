@@ -40,6 +40,14 @@
             font-weight: bold;
         }
 
+        .description {
+            margin-left: 1.5rem;
+            margin-top: 0.5rem;
+            padding-left: 1rem;
+            border-left: 3px solid #444;
+            color: #d6d6d6;
+        }
+
         /* ------------------------
            Form Layout
            ------------------------ */
@@ -180,12 +188,12 @@
     <strong>Current Depth:</strong> {{ room.used_depth }}<br><br>
 
     <strong>Location ({{ room.location_roll }}):</strong> {{ room.location }}
-    <div class="location-description">
+    <div class="description">
         {{ room.location_text | render_md | safe }}
     </div>
 
     <strong>Detail ({{ room.detail_roll }}):</strong> {{ room.detail }}
-    <div class="location-description">
+    <div class="description">
         {{ room.detail_text | render_md | safe }}
     </div>
 
