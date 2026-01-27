@@ -75,6 +75,33 @@
         }
 
         /* ------------------------
+           Meta / Modifier Badges
+           ------------------------ */
+        .meta-line {
+            font-size: 0.9rem;
+            opacity: 0.85;
+            margin-bottom: 0.75rem;
+        }
+
+        .meta-badge {
+            display: inline-block;
+            padding: 0.1rem 0.4rem;
+            margin-left: 0.3rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            background: #333;
+            color: #ccc;
+        }
+
+        .meta-badge.positive {
+            color: #c8e6c9;
+        }
+
+        .meta-badge.negative {
+            color: #ffcdd2;
+        }
+
+        /* ------------------------
            Status Badges
            ------------------------ */
         .badge {
@@ -159,39 +186,32 @@
 
 </form>
 
-<!-- =========================
-     LEVEL DETAILS
-     ========================= -->
-{% if level %}
-<div class="section">
-    <strong>Current Level:</strong> {{ level }}<br>
-    <strong>Modifiers:</strong>
-    {% if level_modifiers %}
-        <ul>
-        {% for key, value in level_modifiers.items() %}
-            {% if value != 0 %}
-                <li>{{ key.replace("_", " ").title() }}: {{ format_modifier(value) }}</li>
-            {% endif %}
-        {% endfor %}
-        </ul>
-    {% else %}
-        <em>No active modifiers.</em>
-    {% endif %}
-</div>
-{% endif %}
 
 <!-- =========================
      LOCATION OUTPUT
      ========================= -->
 {% if room %}
 <div class="section">
-    <strong>Current Depth:</strong> {{ room.used_depth }}<br><br>
 
+    <!-- ---------- Meta Line: Level, Depth, Modifiers ---------- -->
+    <div class="meta-line">
+        Level {{ level }} · Depth {{ room.used_depth }}
+        {% for key, value in level_modifiers.items() %}
+            {% if value != 0 %}
+                <span class="meta-badge {% if value > 0 %}positive{% else %}negative{% endif %}">
+                    {{ key.replace("_", " ").title() }} {{ format_modifier(value) }}
+                </span>
+            {% endif %}
+        {% endfor %}
+    </div>
+
+    <!-- ---------- Location ---------- -->
     <strong>Location ({{ room.location_roll }}):</strong> {{ room.location }}
     <div class="description">
         {{ room.location_text | render_md | safe }}
     </div>
 
+    <!-- ---------- Detail ---------- -->
     <strong>Detail ({{ room.detail_roll }}):</strong> {{ room.detail }}
     <div class="description">
         {{ room.detail_text | render_md | safe }}
@@ -245,6 +265,7 @@
     <em>Press 'Generate Location' to generate a new location.</em>
 </div>
 {% endif %}
+
 
 <!-- =========================
      RANDOM ENCOUNTER OUTPUT
