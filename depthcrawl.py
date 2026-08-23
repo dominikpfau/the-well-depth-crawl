@@ -13,7 +13,8 @@ from data import (LEVEL_MODIFIERS,
                   LOCATIONS, DETAILS,
                   LOCATION_MODIFIERS, DETAIL_MODIFIERS,
                   LOCATION_DESCRIPTIONS, DETAIL_DESCRIPTIONS,
-                  TREASURE_TABLES, TREASURE_QUALITY_TABLE)
+                  TREASURE_TABLES, TREASURE_QUALITY_TABLE, TREASURE_EXTRA_ITEMS_TABLE,
+                  CONSUMABLE_SUBTYPES, AMPULES_TABLE, POTIONS_TABLE, MISCELLANY_TABLE, ARTIFACTS_TABLE)
 
 
 # ----------------------------
@@ -27,6 +28,12 @@ def roll_table(table: Table, depth: int) -> tuple[int, str]:
             return roll, result
     raise RuntimeError("Invalid table")
 
+def roll_dice(dice_str: str) -> int:
+    """Parses strings like '1d3', '2d6' and returns a total."""
+    if isinstance(dice_str, int):
+        return dice_str
+    n, die = map(int, dice_str.lower().split("d"))
+    return sum(random.randint(1, die) for _ in range(n))
 
 def collect_modifiers(room: dict, trigger: str) -> dict:
     """
@@ -86,22 +93,27 @@ def collect_modifiers(room: dict, trigger: str) -> dict:
     return mods
 
 
-def generate_treasure(quality_mod=0):
+def generate_treasure(quality_mod=0, dungeon_level=1):
     raw_roll = random.randint(1, 6)
     quality_roll = max(0, min(12, raw_roll + quality_mod))
 
     count, quality = TREASURE_QUALITY_TABLE[quality_roll]
 
+    # base treasure items
     item_list = [
         TREASURE_TABLES[quality][random.randint(1, 20)]
         for _ in range(count)
     ]
 
+    # --- ADD EXTRA ITEMS ---
+    extra_items = generate_extra_items(quality_roll, dungeon_level)
+    item_list.extend(extra_items)
+
     return {
         "quality_roll": quality_roll,
         "quality_mod": quality_mod,
         "raw_quality_roll": raw_roll,
-        "number_of_items": count,
+        "number_of_items": count + len(extra_items),
         "quality": quality,
         "item_list": item_list,
     }
@@ -110,8 +122,53 @@ def generate_treasure(quality_mod=0):
 DEFAULT_TREASURE_DC = 8
 DEFAULT_ENCOUNTER_DC = 8
 
+def generate_paint():
+    return "Dose of paint"
 
-def roll_location_treasure(current_dc: int, mods: dict):
+def generate_consumable(subtype=None):
+    if subtype is None:
+        subtype = random.choice(CONSUMABLE_SUBTYPES)
+    if subtype == "potion":
+        return f"Potion: {POTIONS_TABLE[random.randint(1, len(POTIONS_TABLE))]}"
+    elif subtype == "ampule":
+        return f"Ampule: {AMPULES_TABLE[random.randint(1, len(AMPULES_TABLE))]}"
+    elif subtype == "arrow":
+        return f"Arrow: {AMPULES_TABLE[random.randint(1, len(AMPULES_TABLE))]}"
+    elif subtype == "miscellany":
+        return f"Magic Item: {MISCELLANY_TABLE[random.randint(1, len(MISCELLANY_TABLE))]}"
+    else:
+        return None
+
+def generate_artifact(level):
+    roll = random.randint(1, 18)
+    if level > 6:
+        roll += 6
+    return f"Artifact: {ARTIFACTS_TABLE[roll]}"
+
+def generate_extra_items(treasure_quality, dungeon_level):
+    items = []
+
+    rules = TREASURE_EXTRA_ITEMS_TABLE.get(treasure_quality, [])
+    for rule in rules:
+        count = roll_dice(rule["amount"])
+        for _ in range(count):
+            category = rule["category"]
+
+            if category == "paint":
+                items.append(generate_paint())
+            elif category == "artifact":
+                items.append(generate_artifact(dungeon_level))
+            elif category == "consumable":
+                # pick random subtype if none given
+                items.append(generate_consumable())
+            elif category == "paint_or_consumable":
+                if random.choice([True, False]):
+                    items.append(generate_paint())
+                else:
+                    items.append(generate_consumable())
+    return items
+
+def roll_location_treasure(current_dc: int, mods: dict, dungeon_level=1) -> dict:
     if mods["no_treasure"]:
         return {
             "blocked": True,
@@ -128,7 +185,11 @@ def roll_location_treasure(current_dc: int, mods: dict):
     roll = raw_roll + treasure_mod
 
     if roll >= current_dc:
-        treasure = generate_treasure(mods["treasure_quality"])
+        treasure = generate_treasure(
+            quality_mod=mods["treasure_quality"],
+            dungeon_level=dungeon_level
+        )
+
         return {
             "roll": roll,
             "raw_roll": raw_roll,
@@ -313,7 +374,10 @@ def index():
             }
 
         elif action == "treasure":
-            treasure = generate_treasure()
+            treasure = generate_treasure(
+                quality_mod=level_modifiers.get("wealth", 0) if level else 0,
+                dungeon_level=room["used_depth"] if room else 1
+            )
 
         elif action == "reset":
             session.clear()

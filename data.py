@@ -317,6 +317,111 @@ TREASURE_TABLES = {
     },
 }
 
+TREASURE_EXTRA_ITEMS_TABLE = {
+    5: [{"category": "consumable", "amount": 1}],
+    6: [{"category": "consumable", "amount": 1}],
+    7: [{"category": "paint_or_consumable", "amount": "1d3"}],
+    8: [{"category": "paint_or_consumable", "amount": "1d6"}],
+    9: [{"category": "artifact", "amount": 1}],
+    10: [{"category": "paint_or_consumable", "amount": "1d6"}, {"category": "paint", "amount": 6}],
+    11: [{"category": "artifact", "amount": "1d3"}],
+    12: [{"category": "artifact", "amount": "1d3"}, {"category": "paint_or_consumable", "amount": "2d6"}],
+}
+
+# ----------------------------
+# CONSUMABLES
+# ----------------------------
+
+CONSUMABLE_SUBTYPES = ["potion", "ampule", "arrow", "miscellany"]
+
+AMPULES_TABLE = {
+    1: "Acid (yellow)",
+    2: "Concussive blast (turquoise)",
+    3: "Lightning (blue)",
+    4: "Fire (yellow-green)",
+    5: "Air (clear)",
+    6: "Freezing (grey)",
+    7: "Water (lilac)",
+    8: "Heal (steel)",
+    9: "Disintegration (burnt mustard)",
+    10: "Instant wall (tree green)",
+    11: "Stone trap (chocolate)",
+    12: "Tracking (green)",
+    13: "Light (olive)",
+    14: "Magnetism (peach)",
+    15: "Smoke (black)",
+    16: "Petrify (dark slate)",
+    17: "Poison gas (orange)",
+    18: "Sound machine (rose)"
+}
+
+POTIONS_TABLE = {
+    1: "Enhanced hearing (pale yellow)",
+    2: "Enhanced touch (bone)",
+    3: "Enhanced smell (dark red)",
+    4: "Agility (powder blue)",
+    5: "Hair growth (bright yellow)",
+    6: "Sanguinity (slate)",
+    7: "Stoneskin (mauve)",
+    8: "Strength (pale red)",
+    9: "Curative (grey-purple)",
+    10: "Darksight (yellow-green)",
+    11: "Haste (violet)",
+    12: "Awareness (blue)",
+    13: "Enhanced vision (lime green)",
+    14: "Healing (pink)",
+    15: "Perfect direction (royal blue)",
+    16: "Sustenance (blood)",
+    17: "Unconsciousness (dark violet)",
+    18: "Vitality (moss green)"
+}
+
+MISCELLANY_TABLE = {
+    1: "Implosion pill",
+    2: "Climber’s spikes",
+    3: "Cloak of fire absorption",
+    4: "Instant bandage",
+    5: "Ice crystals",
+    6: "Skeleton key",
+    7: "Blademaster’s whetstone",
+    8: "Shield sphere",
+    9: "Jar of wind",
+    10: "Eternal oil",
+    11: "Rod of disruption",
+    12: "Map cloth"
+}
+
+# ----------------------------
+# ARTIFACTS
+# ----------------------------
+
+ARTIFACTS_TABLE = {
+    1: "Instant armor",
+    2: "Purification jar",
+    3: "Mysterious metal lozenge",
+    4: "Extensible ladder",
+    5: "Weapon, minor enchantment",
+    6: "Eternal brush",
+    7: "Chameleon cloak",
+    8: "Spectacles of defense",
+    9: "Helm of breathing",
+    10: "Cloak of comfort",
+    11: "Architect’s spectacles",
+    12: "Helms of shared thought",
+    13: "Weapon, major enchantment",
+    14: "Low-profile armor",
+    15: "Pouch of anything",
+    16: "Shield ring",
+    17: "Painter’s pot",
+    18: "Spectacles of mage sight",
+    19: "Advanced low-profile armor",
+    20: "Weapon, mighty enchantment",
+    21: "Memory skull",
+    22: "Stoneplanter",
+    23: "Guardian ring",
+    24: "Master key"
+}
+
 # ----------------------------
 # DESCRIPTIONS
 # ----------------------------

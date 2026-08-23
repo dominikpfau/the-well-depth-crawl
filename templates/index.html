@@ -306,7 +306,7 @@
     <strong>Quality:</strong>
     {{ treasure.quality }}
     <span class="recent-roll">
-        (Rolled {{ format_roll(treasure.quality_roll, 0)}})
+        (Rolled {{ format_roll(treasure.raw_quality_roll, treasure.quality_mod)}})
     </span>
     <br>
     <strong>Number of Items:</strong> {{ treasure.number_of_items }}<br><br>
