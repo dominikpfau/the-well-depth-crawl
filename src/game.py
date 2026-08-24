@@ -643,7 +643,7 @@ def render_page():
 
     return (
         form_html
-        + _render_location_section()
         + _render_encounter_section()
+        + _render_location_section()
         + _render_treasure_section()
     )
