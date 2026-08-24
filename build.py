@@ -36,6 +36,33 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def assert_safe_to_embed(text: str, source_name: str, forbidden: str) -> None:
+    """
+    Guards against the classic "content contains its own closing tag"
+    bug: HTML's <script>/<style> elements are parsed as raw text up
+    to the *first* occurrence of their closing tag - the parser does
+    not understand nesting. If e.g. app.js contains the literal
+    string "</script>" anywhere (even inside a comment or a string
+    literal), embedding it inside a real <script> element will cut
+    the element short right there, and the rest of the file spills
+    out as visible page text.
+
+    This scans case-insensitively, matching how browsers do it.
+    """
+    lower_text = text.lower()
+    idx = lower_text.find(forbidden.lower())
+    if idx != -1:
+        line_no = text.count("\n", 0, idx) + 1
+        raise SystemExit(
+            f"Refusing to build: {source_name} contains the literal "
+            f"sequence {forbidden!r} on line {line_no}. Embedding this "
+            f"file verbatim into the page would prematurely close the "
+            f"surrounding tag and break the output. Rephrase/escape it "
+            f"(e.g. split the string, or avoid a literal '{forbidden}') "
+            f"and rebuild."
+        )
+
+
 def replace_once(html: str, needle: str, replacement: str, description: str) -> str:
     count = html.count(needle)
     if count != 1:
@@ -53,6 +80,13 @@ def build() -> Path:
     app_js = read(SRC / "app.js")
     data_py = read(SRC / "data.py")
     game_py = read(SRC / "game.py")
+
+    # Guard against accidentally embedding a closing tag inside content
+    # that will be wrapped in that very tag (see docstring above).
+    assert_safe_to_embed(style_css, "src/style.css", "</style")
+    assert_safe_to_embed(app_js, "src/app.js", "</script")
+    assert_safe_to_embed(data_py, "src/data.py", "</script")
+    assert_safe_to_embed(game_py, "src/game.py", "</script")
 
     # Inline the stylesheet.
     index_html = replace_once(

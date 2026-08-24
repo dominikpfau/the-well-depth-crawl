@@ -50,16 +50,17 @@ async function onLevelChange() {
  * during development and in the bundled single-file build:
  *
  *   1. Bundled build (dist/depthcrawl_pyodide.html): build.py has
- *      inlined the file's content into a
- *      <script type="text/python" id="...">...</script> tag right
- *      in the page. We just read its textContent - no network
- *      request, works fine from a plain file:// URL.
+ *      inlined the file's content into a "text/python" script
+ *      element with a matching id, right in the page. We just read
+ *      its textContent - no network request, works fine from a
+ *      plain file:// URL.
  *
  *   2. Dev mode (src/index.html served via a local static server):
- *      that inline tag doesn't exist, so we fall back to fetching
- *      the .py file directly. This requires the page to be served
- *      over http(s):// (browsers block fetch() of local files from
- *      a file:// page), e.g. via `python3 -m http.server` in `src/`.
+ *      that inline element doesn't exist, so we fall back to
+ *      fetching the .py file directly. This requires the page to be
+ *      served over http(s):// (browsers block fetch() of local files
+ *      from a file:// page), e.g. via `python3 -m http.server` in
+ *      `src/`.
  */
 async function loadPythonSource(inlineId, filename) {
     const inlineEl = document.getElementById(inlineId);
