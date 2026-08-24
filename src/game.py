@@ -19,6 +19,7 @@ rules) is unchanged. What changed:
 
 import math
 import random
+import re
 
 import markdown
 
@@ -29,6 +30,7 @@ from data import (
     LOCATION_DESCRIPTIONS, DETAIL_DESCRIPTIONS,
     TREASURE_TABLES, TREASURE_QUALITY_TABLE, TREASURE_EXTRA_ITEMS_TABLE,
     CONSUMABLE_SUBTYPES, AMPULES_TABLE, POTIONS_TABLE, MISCELLANY_TABLE, ARTIFACTS_TABLE,
+    NEXT_LEVEL, ROLL_TWICE, MONSTERS, ENCOUNTER_TABLES,
 )
 
 Table = list[tuple[int, str]]
@@ -260,6 +262,227 @@ def roll_random_encounter(current_dc: int, mods: dict):
 
 
 # ----------------------------
+# ENCOUNTER MONSTER GROUPS
+# ----------------------------
+# See the big comment above ENCOUNTER_TABLES / MONSTERS in data.py for
+# the data format this operates on.
+
+class EncounterDataError(RuntimeError):
+    """Raised when ENCOUNTER_TABLES / MONSTERS in data.py are invalid."""
+
+
+_DICE_RE = re.compile(r"^(\d+)d(\d+)$", re.IGNORECASE)
+_RANGE_RE = re.compile(r"^(\d+)-(\d+)$")
+_INT_RE = re.compile(r"^-?\d+$")
+
+
+def _half_level(level: int) -> int:
+    return level // 2  # rounds down (level 3 -> 1)
+
+
+def _roll_formula_term(term: str, level: int) -> int:
+    term = term.strip()
+
+    dice_match = _DICE_RE.match(term)
+    if dice_match:
+        count, sides = int(dice_match.group(1)), int(dice_match.group(2))
+        return sum(random.randint(1, sides) for _ in range(count))
+
+    range_match = _RANGE_RE.match(term)
+    if range_match:
+        low, high = int(range_match.group(1)), int(range_match.group(2))
+        return random.randint(low, high)
+
+    normalized = term.lower().replace("_", "-").replace(" ", "-")
+    if normalized == "level":
+        return level
+    if normalized == "half-level":
+        return _half_level(level)
+
+    if _INT_RE.match(term):
+        return int(term)
+
+    raise ValueError(f"Can't parse encounter formula term {term!r}.")
+
+
+def roll_monster_count(formula: str, level: int) -> int:
+    """
+    Evaluates a monster's "number formula" (e.g. "3-5 + half-level")
+    for the given dungeon level, returning how many of that monster
+    appear in one group. The result is never less than 1.
+    """
+    parts = re.split(r"\s+([+-])\s+", formula.strip())
+    total = _roll_formula_term(parts[0], level)
+
+    i = 1
+    while i < len(parts):
+        sign_str, term = parts[i], parts[i + 1]
+        value = _roll_formula_term(term, level)
+        total += value if sign_str == "+" else -value
+        i += 2
+
+    return max(1, total)
+
+
+_MAX_ENCOUNTER_SUBROLLS = 50
+
+
+class _RollBudget:
+    """
+    Guards against pathological ENCOUNTER_TABLES data (e.g. a
+    NEXT_LEVEL/ROLL_TWICE combination that never settles on an actual
+    monster) causing runaway recursion. Shared across one whole call
+    to roll_encounter_group(), including all of its ROLL_TWICE
+    branches.
+    """
+
+    __slots__ = ("remaining",)
+
+    def __init__(self, remaining: int):
+        self.remaining = remaining
+
+    def spend(self) -> None:
+        self.remaining -= 1
+        if self.remaining < 0:
+            raise EncounterDataError(
+                f"Encounter roll used up its safety budget of "
+                f"{_MAX_ENCOUNTER_SUBROLLS} sub-rolls - check "
+                "ENCOUNTER_TABLES for a NEXT_LEVEL/ROLL_TWICE chain "
+                "that never resolves to an actual monster."
+            )
+
+
+def roll_encounter_group(level: int) -> dict:
+    """
+    Rolls on the encounter table for `level` - one d6 picks the row
+    (1-2 / 3-4 / 5-6), the other picks the column (1-6) - and returns
+    the resulting monster group(s) plus some info about each roll,
+    for display purposes.
+
+    Normally this resolves to exactly one group, but ROLL_TWICE
+    entries make it resolve to two (or more, if one of those two also
+    happens to be ROLL_TWICE) - see the ENCOUNTER_TABLES comment in
+    data.py.
+    """
+    level = max(1, min(12, level))
+    groups = _roll_encounter_groups_at(level, _RollBudget(_MAX_ENCOUNTER_SUBROLLS))
+    return {"requested_level": level, "groups": groups}
+
+
+def _roll_encounter_groups_at(level: int, budget: _RollBudget) -> list:
+    budget.spend()
+    current_level = level
+
+    while True:
+        table = ENCOUNTER_TABLES[current_level]
+        row_die, col_die = random.randint(1, 6), random.randint(1, 6)
+        row_index = (row_die - 1) // 2  # 1-2 -> 0, 3-4 -> 1, 5-6 -> 2
+        col_index = col_die - 1
+        entry = table[row_index][col_index]
+
+        if entry == NEXT_LEVEL:
+            current_level += 1
+            if current_level > 12:
+                # _validate_encounter_data() should already have
+                # caught this at import time - this is just a
+                # runtime safety net against the same data bug.
+                raise EncounterDataError(
+                    "Encounter table cascaded past level 12 - level "
+                    "12's table must not contain a NEXT_LEVEL entry."
+                )
+            budget.spend()
+            continue
+
+        if entry == ROLL_TWICE:
+            return (
+                _roll_encounter_groups_at(current_level, budget)
+                + _roll_encounter_groups_at(current_level, budget)
+            )
+
+        count = sum(
+            roll_monster_count(MONSTERS[entry["monster"]], current_level)
+            for _ in range(entry["multiplier"])
+        )
+        return [{
+            "rolled_on_level": current_level,
+            "dice": (row_die, col_die),
+            "row": row_index + 1,
+            "column": col_die,
+            "monster": entry["monster"],
+            "multiplier": entry["multiplier"],
+            "count": count,
+        }]
+
+
+def _validate_encounter_data() -> None:
+    """
+    Sanity-checks ENCOUNTER_TABLES / MONSTERS from data.py. Runs once
+    at import time so authoring mistakes (typo'd monster name, a
+    missing cell, a NEXT_LEVEL on level 12, ...) surface immediately
+    with a clear message instead of as a confusing crash mid-game.
+    """
+    expected_levels = set(range(1, 13))
+    actual_levels = set(ENCOUNTER_TABLES.keys())
+    if actual_levels != expected_levels:
+        raise EncounterDataError(
+            f"ENCOUNTER_TABLES must have exactly levels 1-12, got {sorted(actual_levels)}."
+        )
+
+    for level, table in ENCOUNTER_TABLES.items():
+        if len(table) != 3:
+            raise EncounterDataError(
+                f"Encounter table for level {level} must have exactly "
+                f"3 rows, got {len(table)}."
+            )
+
+        for row_index, row in enumerate(table):
+            row_number = row_index + 1
+            if len(row) != 6:
+                raise EncounterDataError(
+                    f"Level {level}, row {row_number} must have exactly "
+                    f"6 entries (one per column die 1-6), got {len(row)}."
+                )
+
+            for col_index, entry in enumerate(row):
+                col_number = col_index + 1
+
+                if entry == NEXT_LEVEL:
+                    if level >= 12:
+                        raise EncounterDataError(
+                            "Level 12's encounter table must not contain "
+                            "a NEXT_LEVEL entry (there is no level 13 to "
+                            f"cascade to) - check row {row_number}, "
+                            f"column {col_number}."
+                        )
+                    continue
+
+                if entry == ROLL_TWICE:
+                    # Allowed on every level, including 12 - it rerolls
+                    # on the *same* level's table, so it never needs a
+                    # higher level to exist.
+                    continue
+
+                monster = entry.get("monster")
+                if monster not in MONSTERS:
+                    raise EncounterDataError(
+                        f"Level {level}, row {row_number}, column "
+                        f"{col_number} references unknown monster "
+                        f"{monster!r}. Add it to MONSTERS in data.py."
+                    )
+
+                try:
+                    roll_monster_count(MONSTERS[monster], level)
+                except ValueError as exc:
+                    raise EncounterDataError(
+                        f"Monster {monster!r} has an invalid number "
+                        f"formula {MONSTERS[monster]!r}: {exc}"
+                    ) from exc
+
+
+_validate_encounter_data()
+
+
+# ----------------------------
 # UI HELPERS (unchanged from the Flask version)
 # ----------------------------
 
@@ -377,12 +600,19 @@ def handle_action(action, depth_form=None, level_form=None):
         encounter_check = roll_random_encounter(encounter_dc, mods)
         encounter_dc = encounter_check["next_dc"]
 
+        monsters = (
+            roll_encounter_group(level if level else 1)
+            if encounter_check["success"]
+            else None
+        )
+
         latest_encounter = {
             "source": "Entering location",
             "roll": encounter_check["roll"],
             "raw_roll": encounter_check["raw_roll"],
             "mod": encounter_check["mod"],
             "dc_before": encounter_dc_before,
+            "monsters": monsters,
             "success": encounter_check["success"],
         }
 
@@ -402,12 +632,19 @@ def handle_action(action, depth_form=None, level_form=None):
         encounter_check = roll_random_encounter(encounter_dc, mods)
         encounter_dc = encounter_check["next_dc"]
 
+        monsters = (
+            roll_encounter_group(level if level else 1)
+            if encounter_check["success"]
+            else None
+        )
+
         latest_encounter = {
             "source": "Ransacking location",
             "roll": encounter_check["roll"],
             "raw_roll": encounter_check["raw_roll"],
             "mod": encounter_check["mod"],
             "dc_before": encounter_dc_before,
+            "monsters": monsters,
             "success": encounter_check["success"],
         }
 
@@ -546,6 +783,35 @@ def _render_location_section():
     """
 
 
+def _render_encounter_monsters(latest_encounter):
+    if not latest_encounter["success"]:
+        return "<em>No encounter.</em>"
+
+    monsters = latest_encounter.get("monsters")
+    groups = monsters.get("groups") if monsters else None
+    if not groups:
+        # Shouldn't normally happen (a successful check always rolls at
+        # least one group), but render *something* sensible if it ever does.
+        return "<strong>A random encounter occurs!</strong>"
+
+    requested_level = monsters["requested_level"]
+    lines = []
+    for group in groups:
+        cascade_note = ""
+        if group["rolled_on_level"] != requested_level:
+            cascade_note = (
+                f' <span class="meta-badge">rolled on Level '
+                f'{group["rolled_on_level"]} table</span>'
+            )
+        row_die, col_die = group["dice"]
+        lines.append(
+            f'<span class="recent-roll">{group["count"]}&times; {group["monster"]}</span>'
+            f" (row d6: {row_die} \u2192 row {group['row']}, column d6: {col_die}){cascade_note}"
+        )
+
+    return "<strong>A random encounter occurs!</strong><br>" + "<br>".join(lines)
+
+
 def _render_encounter_section():
     latest_encounter = SESSION.get("latest_encounter")
 
@@ -562,11 +828,7 @@ def _render_encounter_section():
         if latest_encounter["success"]
         else '<span class="badge badge-fail">Safe</span>'
     )
-    result_text = (
-        "<strong>A random encounter occurs!</strong>"
-        if latest_encounter["success"]
-        else "<em>No encounter.</em>"
-    )
+    result_text = _render_encounter_monsters(latest_encounter)
 
     return f"""
     <div class="section">

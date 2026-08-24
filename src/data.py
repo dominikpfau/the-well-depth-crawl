@@ -18,6 +18,248 @@ LEVEL_MODIFIERS = {
 }
 
 # ----------------------------
+# RANDOM ENCOUNTERS
+# ----------------------------
+#
+# Each level (1-12) has its own encounter table with 3 rows of 6
+# entries each (18 cells total). It's rolled with 2d6, but *not*
+# added together - one die picks the row, the other picks the column:
+#
+#   - "row die"    1-2 -> row 1
+#                  3-4 -> row 2
+#                  5-6 -> row 3
+#   - "column die" 1-6 -> that column within the chosen row
+#
+# A table is written as a list of 3 rows, each row a list of exactly
+# 6 entries (row index 0 = row 1, column index 0 = column die "1",
+# and so on). Every entry is either:
+#
+#   - encounter("Monster Name")        one group of that monster
+#   - encounter("Monster Name", x=3)   roll that monster's own number
+#                                       formula 3 separate times and
+#                                       sum the results for the total
+#   - NEXT_LEVEL                        instead of a monster, reroll
+#                                       2d6 on the *next higher*
+#                                       level's table (this can chain
+#                                       through several levels; the
+#                                       level 12 table must never use
+#                                       this, since there's no level 13
+#                                       to cascade to)
+#   - ROLL_TWICE                        reroll 2d6 on this *same*
+#                                       level's table twice, and
+#                                       combine both results (you get
+#                                       two monster groups at once -
+#                                       possibly the same monster
+#                                       twice, or two different ones).
+#                                       Each of those two rolls can
+#                                       itself be NEXT_LEVEL or even
+#                                       another ROLL_TWICE. Unlike
+#                                       NEXT_LEVEL, this is allowed on
+#                                       level 12 too, since it doesn't
+#                                       need a higher level to exist.
+#
+# Each monster has its own "number formula" (in MONSTERS below)
+# describing how many show up in a single group. Formulas are plain
+# strings, parsed by `roll_monster_count()` in game.py:
+#
+#   "1"                   always exactly 1
+#   "1d6"                 roll 1d6
+#   "3-5"                 a uniformly random whole number from 3 to 5
+#   "3-5 + half-level"    as above, plus half the current dungeon
+#                         level, rounded down (level 3 -> +1)
+#   "1d4 + level"         1d4 plus the current dungeon level
+#
+# Terms are combined with " + " / " - " (the spaces matter - they are
+# what tells "3-5" the range apart from "5 - 2" the subtraction).
+
+NEXT_LEVEL = "next_level"
+ROLL_TWICE = "roll_twice"
+
+
+def encounter(monster: str, x: int = 1) -> dict:
+    """Builds a single monster-encounter table entry for ENCOUNTER_TABLES."""
+    return {"type": "monster", "monster": monster, "multiplier": x}
+
+
+MONSTERS = {
+    # name: number formula
+    "Exiles": "2-12",
+    "Gravediggers": "2-5",
+    "Simple Dead": "3-5 + half-level",
+    "Revenants": "1-3 + half-level",
+    "Critters": "1",
+    "Rot Swarm": "1",
+    "Bonebats": "2-12 + half-level",
+    "Tombhounds": "1-3 + half-level",
+    "Small Spiders": "3-8 + half-level",
+    "Serpents": "1-6 + half-level",
+    "Tangles": "2-4 + half-level",
+    "Toothswarm": "1",
+    "Large Spiders": "3-4 + half-level",
+    "Plagueborn": "1-3 + half-level",
+    "Rot King": "1 + half-level",
+    "Golem": "1",
+    "Infected Revenants": "1-3 + half-level",
+    "Infected Tombhounds": "1-3 + half-level",
+    "Infected Tangles": "2-4 + half-level",
+    "Gloomwright": "1",
+    "Ash Ghost": "1",
+    "Too Big Spiders": "1-2",
+    "Ash Squall": "1",
+    "THE TANGLED": "1",
+    "Ash Storm Calms": "1",
+    "Ash Storm Grows": "1",
+    "Ash Storm Hits": "1",
+}
+
+ENCOUNTER_TABLES = {
+    1: [
+        # Row 1
+        [encounter("Exiles"), encounter("Gravediggers"), encounter("Simple Dead"),
+         encounter("Simple Dead"), encounter("Revenants"), encounter("Revenants")],
+        # Row 2
+        [encounter("Critters"), encounter("Rot Swarm"), encounter("Bonebats"),
+         encounter("Tombhounds"), encounter("Small Spiders"), encounter("Small Spiders")],
+        # Row 3
+        [encounter("Serpents"), encounter("Serpents"), encounter("Tangles"),
+         encounter("Toothswarm"), encounter("Toothswarm"), NEXT_LEVEL],
+    ],
+
+    2: [
+        # Row 1
+        [encounter("Gravediggers"), encounter("Simple Dead"), encounter("Simple Dead"),
+         encounter("Simple Dead"), encounter("Revenants"), encounter("Revenants")],
+        # Row 2
+        [encounter("Critters"), encounter("Rot Swarm"), encounter("Bonebats"),
+         encounter("Tombhounds"), encounter("Small Spiders"), encounter("Small Spiders")],
+        # Row 3
+        [encounter("Serpents"), encounter("Serpents"), encounter("Tangles"),
+         encounter("Toothswarm"), encounter("Toothswarm"), NEXT_LEVEL],
+    ],
+
+    3: [
+        # Row 1
+        [encounter("Gravediggers"), encounter("Simple Dead"), encounter("Simple Dead"),
+         encounter("Simple Dead"), encounter("Revenants"), encounter("Revenants")],
+        # Row 2
+        [encounter("Rot Swarm"), encounter("Bonebats"), encounter("Bonebats"),
+         encounter("Tombhounds"), encounter("Small Spiders"), encounter("Large Spiders")],
+        # Row 3
+        [encounter("Serpents"), encounter("Serpents"), encounter("Tangles"),
+         encounter("Toothswarm"), encounter("Toothswarm"), NEXT_LEVEL],
+    ],
+
+    4: [
+        # Row 1
+        [encounter("Gravediggers"), encounter("Simple Dead"), encounter("Simple Dead"),
+         encounter("Simple Dead"), encounter("Revenants"), encounter("Revenants")],
+        # Row 2
+        [encounter("Rot Swarm"), encounter("Bonebats"), encounter("Bonebats"),
+         encounter("Tombhounds"), encounter("Small Spiders"), encounter("Large Spiders")],
+        # Row 3
+        [encounter("Serpents"), encounter("Serpents"), encounter("Tangles"),
+         encounter("Tangles"), encounter("Toothswarm"), NEXT_LEVEL],
+    ],
+
+    5: [
+        # Row 1
+        [encounter("Simple Dead"), encounter("Simple Dead"), encounter("Plagueborn"),
+         encounter("Revenants"), encounter("Revenants"), encounter("Revenants")],
+        # Row 2
+        [encounter("Rot King"), encounter("Bonebats"), encounter("Tombhounds"),
+         encounter("Tombhounds"), encounter("Small Spiders"), encounter("Large Spiders")],
+        # Row 3
+        [encounter("Serpents"), encounter("Serpents"), encounter("Tangles"),
+         encounter("Golem"), encounter("Toothswarm"), NEXT_LEVEL],
+    ],
+
+    6: [
+        # Row 1
+        [encounter("Plagueborn"), encounter("Plagueborn"), encounter("Plagueborn"),
+         encounter("Revenants"), encounter("Revenants"), encounter("Infected Revenants")],
+        # Row 2
+        [encounter("Rot King"), encounter("Tombhounds"), encounter("Infected Tombhounds"),
+         encounter("Small Spiders", 2), encounter("Large Spiders"), encounter("Large Spiders")],
+        # Row 3
+        [encounter("Infected Tangles"), encounter("Infected Tangles"), encounter("Golem"),
+         encounter("Toothswarm"), encounter("Gloomwright"), NEXT_LEVEL],
+    ],
+
+    7: [
+        # Row 1
+        [encounter("Simple Dead"), encounter("Simple Dead"), encounter("Plagueborn"),
+         encounter("Revenants"), encounter("Revenants"), encounter("Revenants")],
+        # Row 2
+        [encounter("Rot King"), encounter("Tombhounds"), encounter("Tombhounds"),
+         encounter("Large Spiders"), encounter("Large Spiders"), encounter("Serpents")],
+        # Row 3
+        [encounter("Ash Ghost"), encounter("Tangles"), encounter("Golem"),
+         encounter("Toothswarm"), encounter("Gloomwright"), NEXT_LEVEL],
+    ],
+
+    8: [
+        # Row 1
+        [encounter("Simple Dead"), encounter("Simple Dead"), encounter("Simple Dead"),
+         encounter("Revenants"), encounter("Revenants"), encounter("Revenants")],
+        # Row 2
+        [encounter("Bonebats"), encounter("Tombhounds"), encounter("Tombhounds"),
+         encounter("Large Spiders"), encounter("Too Big Spiders"), encounter("Serpents")],
+        # Row 3
+        [encounter("Ash Ghost"), encounter("Tangles"), encounter("Golem"),
+         encounter("Toothswarm", 2), encounter("Gloomwright"), NEXT_LEVEL],
+    ],
+
+    9: [
+        # Row 1
+        [encounter("Simple Dead"), encounter("Simple Dead"), encounter("Revenants"),
+         encounter("Revenants"), encounter("Revenants"), encounter("Bonebats", 2)],
+        # Row 2
+        [encounter("Tombhounds"), encounter("Tombhounds"), encounter("Large Spiders"),
+         encounter("Too Big Spiders"), encounter("Serpents"), encounter("Serpents")],
+        # Row 3
+        [encounter("Ash Ghost"), encounter("Tangles"), encounter("Golem"),
+         encounter("Toothswarm", 2), encounter("Gloomwright"), NEXT_LEVEL],
+    ],
+
+    10: [
+        # Row 1
+        [encounter("Simple Dead"), encounter("Simple Dead"), encounter("Revenants"),
+         encounter("Revenants"), encounter("Revenants"), encounter("Bonebats", 2)],
+        # Row 2
+        [encounter("Tombhounds"), encounter("Tombhounds"), encounter("Too Big Spiders"),
+         encounter("Too Big Spiders"), encounter("Ash Ghost"), encounter("Ash Squall")],
+        # Row 3
+        [encounter("Tangles"), encounter("Tangles"), encounter("Golem"),
+         encounter("THE TANGLED"), encounter("THE TANGLED"), NEXT_LEVEL],
+    ],
+
+    11: [
+        # Row 1
+        [encounter("Ash Storm Calms"), encounter("Ash Storm Calms"), encounter("Ash Storm Calms"),
+         encounter("Ash Storm Grows"), encounter("Ash Storm Grows"), encounter("Ash Storm Grows")],
+        # Row 2
+        [encounter("Ash Storm Grows"), encounter("Ash Storm Grows"), encounter("Ash Storm Grows"),
+         encounter("Ash Storm Grows"), encounter("Ash Storm Grows"), encounter("Ash Storm Grows")],
+        # Row 3
+        [encounter("Ash Storm Hits"), encounter("Ash Storm Hits"), encounter("Ash Storm Hits"),
+         encounter("Ash Storm Hits"), encounter("Ash Storm Hits"), NEXT_LEVEL],
+    ],
+
+    12: [
+        # Row 1
+        [encounter("Simple Dead", 2), encounter("Simple Dead", 2), encounter("Revenants"),
+         encounter("Revenants"), encounter("Bonebats", 3), encounter("Serpents", 2)],
+        # Row 2
+        [encounter("Tombhounds", 2), encounter("Tombhounds", 2), encounter("Too Big Spiders", 2),
+         encounter("Too Big Spiders", 2), encounter("Ash Ghost"), encounter("Ash Squall")],
+        # Row 3
+        [encounter("Tangles", 2), encounter("Golem"), encounter("Toothswarm", 3),
+         encounter("Gloomwright"), encounter("Gloomwright"), ROLL_TWICE],
+    ],
+}
+
+
+# ----------------------------
 # LOCATION GENERATOR
 # ----------------------------
 
