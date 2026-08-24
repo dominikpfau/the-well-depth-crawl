@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Depthcrawl Generator</title>
+<link rel="stylesheet" href="style.css">
+
+<!-- Pyodide runtime (loaded from CDN - this is the only "server" this app talks to) -->
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+</head>
+
+<body>
+
+<h1>Depthcrawl Generator</h1>
+<p style="opacity:0.7; font-size:0.9rem;">
+
+</p>
+
+<div id="loading">Loading python-environment (Pyodide) and dependencies&hellip; this can take a few seconds on first start.</div>
+<div id="error-box"></div>
+<div id="app" style="display:none;"></div>
+
+<footer>
+
+</footer>
+
+<!--
+    Dev mode: data.py / game.py are loaded via fetch() at runtime
+    (see app.js -> loadPythonSource). This means:
+
+      - Real .py files with actual syntax highlighting / linting in
+        your editor.
+      - Must be served via a local static server, since browsers
+        block fetch() of local files from a file:// page, e.g.:
+
+            cd src
+            python3 -m http.server
+            (then open http://localhost:8000/)
+
+    Run `python3 build.py` from the project root to produce a
+    self-contained dist/depthcrawl_pyodide.html that inlines
+    everything and works straight from a double-clicked file.
+-->
+<script src="app.js"></script>
+
+</body>
+</html>
