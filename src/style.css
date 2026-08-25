@@ -84,6 +84,41 @@
         min-width: 120px;
     }
 
+    .checkbox-row {
+        gap: 1rem;
+        font-size: 0.9rem;
+    }
+
+    .checkbox-row label {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-weight: normal;
+        cursor: pointer;
+    }
+
+    .checkbox-row input[type="checkbox"] {
+        margin: 0;
+        padding: 0;
+        width: auto;
+    }
+
+    .primary-action {
+        display: block;
+        width: 100%;
+        font-size: 1.15rem;
+        font-weight: bold;
+        padding: 0.9rem;
+        margin-top: 0.6rem;
+        background: #8a6716;
+        border-color: #c99a2e;
+        color: #fff3d6;
+    }
+
+    .primary-action:hover:not([disabled]) {
+        background: #a67c1c;
+    }
+
     /* ------------------------
        Meta / Modifier Badges
        ------------------------ */

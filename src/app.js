@@ -30,6 +30,14 @@ function getLevel() {
     return el.value;
 }
 
+function getCheckbox(id) {
+    // Same idea as getDepth(): null if the checkbox isn't currently
+    // in the DOM (only the Location view has these), so other views'
+    // actions never accidentally reset the stored preference.
+    const el = document.getElementById(id);
+    return el ? el.checked : null;
+}
+
 function renderApp() {
     const html = pyGame.render_page();
     document.getElementById("app").innerHTML = html;
@@ -37,7 +45,14 @@ function renderApp() {
 
 async function runAction(action) {
     try {
-        pyGame.handle_action(action, getDepthArg(), getLevel());
+        pyGame.handle_action(
+            action,
+            getDepthArg(),
+            getLevel(),
+            null,
+            getCheckbox("roll-treasure"),
+            getCheckbox("roll-encounter")
+        );
         renderApp();
     } catch (err) {
         showError(err);
@@ -46,7 +61,14 @@ async function runAction(action) {
 
 async function onLevelChange() {
     try {
-        pyGame.handle_action(null, getDepthArg(), getLevel());
+        pyGame.handle_action(
+            null,
+            getDepthArg(),
+            getLevel(),
+            null,
+            getCheckbox("roll-treasure"),
+            getCheckbox("roll-encounter")
+        );
         renderApp();
     } catch (err) {
         showError(err);
@@ -55,7 +77,14 @@ async function onLevelChange() {
 
 async function switchView(view) {
     try {
-        pyGame.handle_action("switch_view", getDepthArg(), getLevel(), view);
+        pyGame.handle_action(
+            "switch_view",
+            getDepthArg(),
+            getLevel(),
+            view,
+            getCheckbox("roll-treasure"),
+            getCheckbox("roll-encounter")
+        );
         renderApp();
     } catch (err) {
         showError(err);

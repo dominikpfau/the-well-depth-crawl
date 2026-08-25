@@ -630,6 +630,8 @@ def _default_session() -> dict:
         "level": None,
         "level_modifiers": {},
         "active_view": "location",
+        "roll_treasure": True,
+        "roll_encounter": True,
     }
 
 
@@ -647,7 +649,14 @@ def _to_int_or_none(value):
     return int(value)
 
 
-def handle_action(action, depth_form=None, level_form=None, view_form=None):
+def handle_action(
+    action,
+    depth_form=None,
+    level_form=None,
+    view_form=None,
+    roll_treasure_form=None,
+    roll_encounter_form=None,
+):
     """
     Mirrors the POST branch of the original Flask route.
 
@@ -659,6 +668,13 @@ def handle_action(action, depth_form=None, level_form=None, view_form=None):
 
     `view_form` is only used by "switch_view" - which view
     ("location" | "encounter" | "treasure") to make active.
+
+    `roll_treasure_form` / `roll_encounter_form` are the Location
+    Generator's two checkboxes (JS booleans, or None when the field
+    isn't in the DOM right now - e.g. any view other than Location).
+    They control whether "room" rolls for treasure / an entering
+    encounter at all; when off, that part of the location isn't
+    rolled - and so isn't shown - rather than being rolled and hidden.
     """
     global SESSION
 
@@ -669,6 +685,8 @@ def handle_action(action, depth_form=None, level_form=None, view_form=None):
     encounter_dc = SESSION.get("encounter_dc", DEFAULT_ENCOUNTER_DC)
     encounter_check = SESSION.get("encounter_check")
     active_view = SESSION.get("active_view", "location")
+    roll_treasure = SESSION.get("roll_treasure", True)
+    roll_encounter = SESSION.get("roll_encounter", True)
 
     # read depth/level "from the form", same as the Flask version did
     depth_raw = _to_int_or_none(depth_form)
@@ -677,6 +695,11 @@ def handle_action(action, depth_form=None, level_form=None, view_form=None):
 
     level = _to_int_or_none(level_form)
     level_modifiers = LEVEL_MODIFIERS.get(level, {})
+
+    if roll_treasure_form is not None:
+        roll_treasure = bool(roll_treasure_form)
+    if roll_encounter_form is not None:
+        roll_encounter = bool(roll_encounter_form)
 
     if action == "room":
         used_depth = depth
@@ -697,55 +720,62 @@ def handle_action(action, depth_form=None, level_form=None, view_form=None):
 
         # --- Roll the treasure hidden in this location, right now.
         # Shown immediately - there's no separate "search" step for
-        # treasure anymore.
-        treasure_mods = collect_modifiers(room, trigger="ransack")
-        treasure_mods["treasure_roll"] += level_modifiers.get("wealth", 0)
-        treasure_mods["treasure_quality"] += level_modifiers.get("wealth", 0)
+        # treasure anymore. Skipped entirely (room["treasure_result"]
+        # stays None) if the "Roll for Treasure" checkbox is off - the
+        # Treasure section then just isn't shown, rather than shown
+        # empty.
+        if roll_treasure:
+            treasure_mods = collect_modifiers(room, trigger="ransack")
+            treasure_mods["treasure_roll"] += level_modifiers.get("wealth", 0)
+            treasure_mods["treasure_quality"] += level_modifiers.get("wealth", 0)
 
-        treasure_dc_before = treasure_dc
-        treasure_check = roll_location_treasure(
-            treasure_dc, treasure_mods, dungeon_level=used_depth
-        )
-        treasure_dc = treasure_check["next_dc"]
+            treasure_dc_before = treasure_dc
+            treasure_check = roll_location_treasure(
+                treasure_dc, treasure_mods, dungeon_level=used_depth
+            )
+            treasure_dc = treasure_check["next_dc"]
 
-        room["treasure_result"] = {
-            "treasure_roll": treasure_check["roll"],
-            "raw_roll": treasure_check["raw_roll"],
-            "mod": treasure_check["mod"],
-            "treasure_dc_before": treasure_dc_before,
-            "found_treasure": treasure_check["treasure"],
-            "blocked": treasure_check.get("blocked", False),
-        }
+            room["treasure_result"] = {
+                "treasure_roll": treasure_check["roll"],
+                "raw_roll": treasure_check["raw_roll"],
+                "mod": treasure_check["mod"],
+                "treasure_dc_before": treasure_dc_before,
+                "found_treasure": treasure_check["treasure"],
+                "blocked": treasure_check.get("blocked", False),
+            }
 
         # --- Random encounter check for entering the location. This
         # belongs to the location itself (shown inside the Location
         # Generator view), separate from the standalone "Check for
         # Encounter" result in the Encounter Generator view - they no
-        # longer share a slot, so using one doesn't overwrite the other.
-        encounter_mods = collect_modifiers(room, trigger="room")
-        encounter_mods["encounter_roll"] += level_modifiers.get("population", 0)
+        # longer share a slot, so using one doesn't overwrite the
+        # other. Skipped entirely (room["entering_encounter"] stays
+        # None) if "Roll for Encounter" is off.
+        if roll_encounter:
+            encounter_mods = collect_modifiers(room, trigger="room")
+            encounter_mods["encounter_roll"] += level_modifiers.get("population", 0)
 
-        encounter_dc_before = encounter_dc
-        entering_check = roll_random_encounter(encounter_dc, encounter_mods)
-        encounter_dc = entering_check["next_dc"]
+            encounter_dc_before = encounter_dc
+            entering_check = roll_random_encounter(encounter_dc, encounter_mods)
+            encounter_dc = entering_check["next_dc"]
 
-        monsters = (
-            roll_encounter_group(level if level else 1)
-            if entering_check["success"]
-            else None
-        )
-        monster_treasure = roll_monster_treasure(monsters, level, level_modifiers, treasure_dc)
-        if monster_treasure is not None:
-            treasure_dc = monster_treasure["next_dc"]
-
-        room["entering_encounter"] = {
-            "raw_roll": entering_check["raw_roll"],
-            "mod": entering_check["mod"],
-            "dc_before": encounter_dc_before,
-            "monsters": monsters,
-            "treasure": monster_treasure,
-            "success": entering_check["success"],
-        }
+            monsters = (
+                roll_encounter_group(level if level else 1)
+                if entering_check["success"]
+                else None
+            )
+            # Unlike the standalone Encounter Generator, an encounter
+            # met while entering a location never carries its own
+            # treasure - only the location itself does (governed by
+            # "Roll for Treasure" above, shown in its own section).
+            room["entering_encounter"] = {
+                "raw_roll": entering_check["raw_roll"],
+                "mod": entering_check["mod"],
+                "dc_before": encounter_dc_before,
+                "monsters": monsters,
+                "treasure": None,
+                "success": entering_check["success"],
+            }
 
         depth = used_depth + 1
 
@@ -806,6 +836,8 @@ def handle_action(action, depth_form=None, level_form=None, view_form=None):
         "level": level,
         "level_modifiers": level_modifiers,
         "active_view": active_view,
+        "roll_treasure": roll_treasure,
+        "roll_encounter": roll_encounter,
     }
 
 
@@ -942,12 +974,17 @@ def _render_encounter_treasure(result):
     """
 
 
-def _render_encounter_result(result):
+def _render_encounter_result(result, show_treasure=True):
     """
     Renders one encounter-check result - shared between a location's
     own "entering encounter" and the standalone Encounter Generator
     view, since both produce the exact same shape of result (see
     handle_action's "room" and "check_encounter" branches).
+
+    `show_treasure=False` omits the Treasure sub-section entirely -
+    used for a location's entering encounter, which never carries its
+    own treasure (see handle_action's "room" branch), so there's
+    nothing to explain there, not even a "carries no treasure" note.
     """
     badge = (
         '<span class="badge badge-warning">Encounter</span>'
@@ -957,7 +994,7 @@ def _render_encounter_result(result):
 
     if result["success"] and result["monsters"] and result["monsters"]["groups"]:
         body = _render_monster_lines(result["monsters"])
-        treasure_html = _render_encounter_treasure(result["treasure"])
+        treasure_html = _render_encounter_treasure(result["treasure"]) if show_treasure else ""
     else:
         body = "<em>No encounter.</em>"
         treasure_html = ""
@@ -984,14 +1021,31 @@ def _render_encounter_result(result):
 def _render_location_view():
     room = SESSION.get("room")
     depth = SESSION.get("depth", 0)
+    roll_treasure = SESSION.get("roll_treasure", True)
+    roll_encounter = SESSION.get("roll_encounter", True)
+
+    treasure_checked = "checked" if roll_treasure else ""
+    encounter_checked = "checked" if roll_encounter else ""
 
     controls = f"""
     <div class="section">
         <div class="form-row">
             <label for="depth">Depth:</label>
             <input type="number" id="depth" name="depth" value="{depth}">
-            <button type="button" onclick="runAction('room')">Generate Location</button>
         </div>
+        <div class="form-row checkbox-row">
+            <label>
+                <input type="checkbox" id="roll-treasure" {treasure_checked}>
+                Roll for Treasure
+            </label>
+            <label>
+                <input type="checkbox" id="roll-encounter" {encounter_checked}>
+                Roll for Encounter
+            </label>
+        </div>
+        <button type="button" class="primary-action" onclick="runAction('room')">
+            Generate Location
+        </button>
     </div>
     """
 
@@ -1007,7 +1061,15 @@ def _render_location_view():
         entering_html = f"""
         <hr>
         <strong>Encounter:</strong><br>
-        {_render_encounter_result(room["entering_encounter"])}
+        {_render_encounter_result(room["entering_encounter"], show_treasure=False)}
+        """
+
+    treasure_html = ""
+    if room.get("treasure_result"):
+        treasure_html = f"""
+        <hr>
+        <strong>Treasure:</strong><br>
+        {_render_treasure_check_result(room["treasure_result"])}
         """
 
     return controls + f"""
@@ -1020,10 +1082,7 @@ def _render_location_view():
         <strong>Detail ({room['detail_roll']}):</strong> {room['detail']}
         <div class="description">{render_md(room['detail_text'])}</div>
         {entering_html}
-        <hr>
-
-        <strong>Treasure:</strong><br>
-        {_render_treasure_check_result(room["treasure_result"])}
+        {treasure_html}
     </div>
     """
 
