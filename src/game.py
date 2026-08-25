@@ -12,7 +12,7 @@ rules) is unchanged. What changed:
     no other visitor to separate sessions from.
   * The Jinja2 template (`templates/index.html`) is replaced by a
     small set of pure-Python HTML-rendering functions
-    (`render_page`, `_render_ransack`, ...) that build the same
+    (`render_page`, `_render_treasure_result`, ...) that build the same
     markup the template used to produce. The CSS/JS shell around it
     now lives in the surrounding .html file instead of Flask.
 """
@@ -553,10 +553,10 @@ def handle_action(action, depth_form=None, level_form=None):
     """
     Mirrors the POST branch of the original Flask route.
 
-    `action` is one of "room", "ransack", "treasure", "reset", or None
-    (None happens when only the Level dropdown changed, just like the
-    original template's `onchange="this.form.submit()"` produced a
-    plain POST without an `action` field).
+    `action` is one of "room", "check_encounter", "treasure", "reset",
+    or None (None happens when only the Level dropdown changed, just
+    like the original template's `onchange="this.form.submit()"`
+    produced a plain POST without an `action` field).
     """
     global SESSION
 
@@ -588,16 +588,12 @@ def handle_action(action, depth_form=None, level_form=None):
             "detail_roll": det_roll,
             "detail": detail,
             "detail_text": DETAIL_DESCRIPTIONS.get(detail, "No description available."),
-            "ransacked": False,
-            "ransack_result": None,
+            "treasure_result": None,
         }
 
-        # --- Pre-roll the treasure hidden in this location, right now.
-        # The loot is already "there" the moment the location exists,
-        # independent of whether/when the player actually searches for
-        # it - pressing "Ransack Location" later just *reveals* this
-        # stored result (see the "ransack" branch below) instead of
-        # rolling it fresh at that point.
+        # --- Roll the treasure hidden in this location, right now.
+        # Unlike the encounter check below, this is shown immediately -
+        # there's no separate "search" step for treasure anymore.
         treasure_mods = collect_modifiers(room, trigger="ransack")
         treasure_mods["treasure_roll"] += level_modifiers.get("wealth", 0)
         treasure_mods["treasure_quality"] += level_modifiers.get("wealth", 0)
@@ -608,7 +604,7 @@ def handle_action(action, depth_form=None, level_form=None):
         )
         treasure_dc = treasure_check["next_dc"]
 
-        room["ransack_result"] = {
+        room["treasure_result"] = {
             "treasure_roll": treasure_check["roll"],
             "raw_roll": treasure_check["raw_roll"],
             "mod": treasure_check["mod"],
@@ -643,11 +639,10 @@ def handle_action(action, depth_form=None, level_form=None):
 
         depth = used_depth + 1
 
-    elif action == "ransack" and room and not room.get("ransacked"):
-        # The treasure itself was already rolled when the location was
-        # generated (see the "room" branch above) - all that happens
-        # here is revealing that stored result, plus the risk of a
-        # random encounter from the act of searching.
+    elif action == "check_encounter" and room:
+        # A standalone risk check (e.g. searching around, listening at
+        # a door, ...) - no longer tied to treasure at all, that's
+        # already visible from the moment the location was generated.
         mods = collect_modifiers(room, trigger="ransack")
         mods["encounter_roll"] += level_modifiers.get("population", 0)
 
@@ -662,7 +657,7 @@ def handle_action(action, depth_form=None, level_form=None):
         )
 
         latest_encounter = {
-            "source": "Ransacking location",
+            "source": "Checking for encounter",
             "roll": encounter_check["roll"],
             "raw_roll": encounter_check["raw_roll"],
             "mod": encounter_check["mod"],
@@ -670,8 +665,6 @@ def handle_action(action, depth_form=None, level_form=None):
             "monsters": monsters,
             "success": encounter_check["success"],
         }
-
-        room["ransacked"] = True
 
     elif action == "treasure":
         treasure = generate_treasure(
@@ -728,11 +721,8 @@ def _render_item_list(item_list):
     return "".join(f"\u2022 {item}<br>" for item in item_list)
 
 
-def _render_ransack(room):
-    if not room.get("ransacked"):
-        return "<em>This location has not been ransacked.</em>"
-
-    result = room["ransack_result"]
+def _render_treasure_result(room):
+    result = room["treasure_result"]
     if result.get("blocked"):
         return "<em>No treasure can be found here.</em>"
 
@@ -792,8 +782,8 @@ def _render_location_section():
 
         <hr>
 
-        <strong>Ransacking:</strong><br>
-        {_render_ransack(room)}
+        <strong>Treasure:</strong><br>
+        {_render_treasure_result(room)}
     </div>
     """
 
@@ -891,9 +881,6 @@ def render_page():
 
     depth = SESSION.get("depth", 0)
     level = SESSION.get("level")
-    room = SESSION.get("room")
-
-    ransack_disabled = "disabled" if (not room or room.get("ransacked")) else ""
 
     form_html = f"""
     <form onsubmit="return false;">
@@ -909,8 +896,8 @@ def render_page():
 
         <div class="button-row">
             <button type="button" onclick="runAction('room')">Generate Location</button>
-            <button type="button" onclick="runAction('ransack')" {ransack_disabled}>
-                Ransack Location
+            <button type="button" onclick="runAction('check_encounter')">
+                Check for Encounter
             </button>
             <button type="button" onclick="runAction('treasure')">Generate Treasure</button>
             <button type="button" onclick="runAction('reset')">Reset</button>
