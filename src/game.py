@@ -591,13 +591,38 @@ def handle_action(action, depth_form=None, level_form=None):
             "ransacked": False,
             "ransack_result": None,
         }
-        mods = collect_modifiers(room, trigger="room")
-        mods["treasure_roll"] += level_modifiers.get("wealth", 0)
-        mods["treasure_quality"] += level_modifiers.get("wealth", 0)
-        mods["encounter_roll"] += level_modifiers.get("population", 0)
+
+        # --- Pre-roll the treasure hidden in this location, right now.
+        # The loot is already "there" the moment the location exists,
+        # independent of whether/when the player actually searches for
+        # it - pressing "Ransack Location" later just *reveals* this
+        # stored result (see the "ransack" branch below) instead of
+        # rolling it fresh at that point.
+        treasure_mods = collect_modifiers(room, trigger="ransack")
+        treasure_mods["treasure_roll"] += level_modifiers.get("wealth", 0)
+        treasure_mods["treasure_quality"] += level_modifiers.get("wealth", 0)
+
+        treasure_dc_before = treasure_dc
+        treasure_check = roll_location_treasure(
+            treasure_dc, treasure_mods, dungeon_level=used_depth
+        )
+        treasure_dc = treasure_check["next_dc"]
+
+        room["ransack_result"] = {
+            "treasure_roll": treasure_check["roll"],
+            "raw_roll": treasure_check["raw_roll"],
+            "mod": treasure_check["mod"],
+            "treasure_dc_before": treasure_dc_before,
+            "found_treasure": treasure_check["treasure"],
+            "blocked": treasure_check.get("blocked", False),
+        }
+
+        # --- Random encounter check for entering the location.
+        encounter_mods = collect_modifiers(room, trigger="room")
+        encounter_mods["encounter_roll"] += level_modifiers.get("population", 0)
 
         encounter_dc_before = encounter_dc
-        encounter_check = roll_random_encounter(encounter_dc, mods)
+        encounter_check = roll_random_encounter(encounter_dc, encounter_mods)
         encounter_dc = encounter_check["next_dc"]
 
         monsters = (
@@ -619,14 +644,12 @@ def handle_action(action, depth_form=None, level_form=None):
         depth = used_depth + 1
 
     elif action == "ransack" and room and not room.get("ransacked"):
+        # The treasure itself was already rolled when the location was
+        # generated (see the "room" branch above) - all that happens
+        # here is revealing that stored result, plus the risk of a
+        # random encounter from the act of searching.
         mods = collect_modifiers(room, trigger="ransack")
-        mods["treasure_roll"] += level_modifiers.get("wealth", 0)
-        mods["treasure_quality"] += level_modifiers.get("wealth", 0)
         mods["encounter_roll"] += level_modifiers.get("population", 0)
-
-        treasure_dc_before = treasure_dc
-        treasure_check = roll_location_treasure(treasure_dc, mods)
-        treasure_dc = treasure_check["next_dc"]
 
         encounter_dc_before = encounter_dc
         encounter_check = roll_random_encounter(encounter_dc, mods)
@@ -649,14 +672,6 @@ def handle_action(action, depth_form=None, level_form=None):
         }
 
         room["ransacked"] = True
-        room["ransack_result"] = {
-            "treasure_roll": treasure_check["roll"],
-            "raw_roll": treasure_check["raw_roll"],
-            "mod": treasure_check["mod"],
-            "treasure_dc_before": treasure_dc_before,
-            "found_treasure": treasure_check["treasure"],
-            "blocked": treasure_check.get("blocked", False),
-        }
 
     elif action == "treasure":
         treasure = generate_treasure(
