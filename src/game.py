@@ -30,7 +30,7 @@ from data import (
     LOCATION_DESCRIPTIONS, DETAIL_DESCRIPTIONS,
     TREASURE_TABLES, TREASURE_QUALITY_TABLE, TREASURE_EXTRA_ITEMS_TABLE,
     CONSUMABLE_SUBTYPES, AMPULES_TABLE, POTIONS_TABLE, MISCELLANY_TABLE, ARTIFACTS_TABLE,
-    NEXT_LEVEL, ROLL_TWICE, MONSTERS, ENCOUNTER_TABLES,
+    NEXT_LEVEL, ROLL_TWICE, MONSTERS, MONSTERS_WITHOUT_TREASURE, ENCOUNTER_TABLES,
 )
 
 Table = list[tuple[int, str]]
@@ -59,14 +59,18 @@ def roll_dice(dice_str) -> int:
     return sum(random.randint(1, die) for _ in range(n))
 
 
-def collect_modifiers(room: dict, trigger: str) -> dict:
+def collect_modifiers(room: dict | None, trigger: str) -> dict:
     """
     trigger: "room" | "ransack"
+
+    `room` may be None (e.g. a "check_encounter" roll made before any
+    location has been generated yet) - that's treated as "no
+    location/detail modifiers apply", not an error.
     """
 
     # Safe defaults
-    loc_mod = LOCATION_MODIFIERS.get(room.get("location"), {}) or {}
-    det_mod = DETAIL_MODIFIERS.get(room.get("detail"), {}) or {}
+    loc_mod = LOCATION_MODIFIERS.get((room or {}).get("location"), {}) or {}
+    det_mod = DETAIL_MODIFIERS.get((room or {}).get("detail"), {}) or {}
 
     sources = [loc_mod, det_mod]
 
@@ -414,6 +418,33 @@ def _roll_encounter_groups_at(level: int, budget: _RollBudget) -> list:
         }]
 
 
+def roll_monster_treasure(monsters, level, level_modifiers):
+    """
+    Rolls the treasure carried by an encountered monster group, using
+    only the current dungeon level's modifiers (LEVEL_MODIFIERS
+    "wealth") - deliberately *not* the location/detail modifiers that
+    apply to a location's own treasure, since this loot belongs to the
+    monster(s), not the place they were found in.
+
+    Returns None if there's nothing to roll for (no encounter, or
+    every monster present is in MONSTERS_WITHOUT_TREASURE - e.g. a
+    plain "Critters" swarm never carries loot). If an encounter mixes
+    a treasure-less monster with one that can carry treasure, this
+    still rolls (once) for the encounter as a whole.
+    """
+    if not monsters:
+        return None
+
+    monster_names = {group["monster"] for group in monsters["groups"]}
+    if not (monster_names - MONSTERS_WITHOUT_TREASURE):
+        return None
+
+    return generate_treasure(
+        quality_mod=level_modifiers.get("wealth", 0) if level else 0,
+        dungeon_level=level if level else 1,
+    )
+
+
 def _validate_encounter_data() -> None:
     """
     Sanity-checks ENCOUNTER_TABLES / MONSTERS from data.py. Runs once
@@ -626,6 +657,7 @@ def handle_action(action, depth_form=None, level_form=None):
             if encounter_check["success"]
             else None
         )
+        monster_treasure = roll_monster_treasure(monsters, level, level_modifiers)
 
         latest_encounter = {
             "source": "Entering location",
@@ -634,15 +666,21 @@ def handle_action(action, depth_form=None, level_form=None):
             "mod": encounter_check["mod"],
             "dc_before": encounter_dc_before,
             "monsters": monsters,
+            "treasure": monster_treasure,
             "success": encounter_check["success"],
         }
 
         depth = used_depth + 1
 
-    elif action == "check_encounter" and room:
+    elif action == "check_encounter":
         # A standalone risk check (e.g. searching around, listening at
-        # a door, ...) - no longer tied to treasure at all, that's
-        # already visible from the moment the location was generated.
+        # a door, ...) - not tied to the location's own treasure at
+        # all (that's already visible from the moment the location
+        # was generated), but an encountered monster can still be
+        # carrying loot of its own - see roll_monster_treasure().
+        # Works even with no location generated yet (room is None):
+        # collect_modifiers() then simply applies no location/detail
+        # modifiers, just the current level's.
         mods = collect_modifiers(room, trigger="ransack")
         mods["encounter_roll"] += level_modifiers.get("population", 0)
 
@@ -655,6 +693,7 @@ def handle_action(action, depth_form=None, level_form=None):
             if encounter_check["success"]
             else None
         )
+        monster_treasure = roll_monster_treasure(monsters, level, level_modifiers)
 
         latest_encounter = {
             "source": "Checking for encounter",
@@ -663,6 +702,7 @@ def handle_action(action, depth_form=None, level_form=None):
             "mod": encounter_check["mod"],
             "dc_before": encounter_dc_before,
             "monsters": monsters,
+            "treasure": monster_treasure,
             "success": encounter_check["success"],
         }
 
@@ -817,6 +857,23 @@ def _render_encounter_monsters(latest_encounter):
     return "<strong>A random encounter occurs!</strong><br>" + "<br>".join(lines)
 
 
+def _render_encounter_treasure(latest_encounter):
+    treasure = latest_encounter.get("treasure")
+    if not treasure:
+        return ""
+
+    return f"""
+    <hr>
+    <strong>Loot:</strong><br>
+    <strong>Quality:</strong> {treasure['quality']}
+    <span class="recent-roll">
+        (Rolled {format_roll(treasure['raw_quality_roll'], treasure['quality_mod'])})
+    </span><br>
+    <strong>Number of Items:</strong> {treasure['number_of_items']}<br><br>
+    {_render_item_list(treasure['item_list'])}
+    """
+
+
 def _render_encounter_section():
     latest_encounter = SESSION.get("latest_encounter")
 
@@ -834,6 +891,7 @@ def _render_encounter_section():
         else '<span class="badge badge-fail">Safe</span>'
     )
     result_text = _render_encounter_monsters(latest_encounter)
+    treasure_html = _render_encounter_treasure(latest_encounter)
 
     return f"""
     <div class="section">
@@ -847,6 +905,7 @@ def _render_encounter_section():
         {badge}
         <br><br>
         {result_text}
+        {treasure_html}
     </div>
     """
 

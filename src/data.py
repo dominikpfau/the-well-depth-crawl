@@ -112,6 +112,16 @@ MONSTERS = {
     "Ash Storm Hits": "1",
 }
 
+# These monsters never carry any treasure - an encounter consisting
+# only of these never triggers a monster-treasure roll (see
+# roll_monster_treasure() in game.py). If an encounter mixes one of
+# these with a monster not on this list, treasure is still rolled.
+MONSTERS_WITHOUT_TREASURE = {
+    "Critters",
+    "Gravediggers",
+    "Exiles",
+}
+
 ENCOUNTER_TABLES = {
     1: [
         # Row 1
