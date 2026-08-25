@@ -133,7 +133,7 @@ def generate_treasure(quality_mod=0, dungeon_level=1):
         for _ in range(count)
     ]
 
-    # --- ADD EXTRA ITEMS ---
+    # --- ADD EXTRA ITEMS (paint, consumables, artifacts, ...) ---
     extra_items = generate_extra_items(quality_roll, dungeon_level)
     item_list.extend(extra_items)
 
@@ -141,6 +141,8 @@ def generate_treasure(quality_mod=0, dungeon_level=1):
         "quality_roll": quality_roll,
         "quality_mod": quality_mod,
         "raw_quality_roll": raw_roll,
+        "base_item_count": count,
+        "extra_item_count": len(extra_items),
         "number_of_items": count + len(extra_items),
         "quality": quality,
         "item_list": item_list,
@@ -829,6 +831,37 @@ def _render_item_list(item_list):
     return "".join(f"\u2022 {item}<br>" for item in item_list)
 
 
+def _pluralize(count, singular, plural=None):
+    plural = plural or f"{singular}s"
+    return f"{count} {singular if count == 1 else plural}"
+
+
+def _render_quality_roll_line(treasure):
+    """
+    Quality tier and item count both fall out of one roll, indexed
+    into TREASURE_QUALITY_TABLE (see generate_treasure()). Labeled
+    "Quality roll" rather than "Rolled" - this line sits right below
+    a check that's *also* labeled "Rolled ... vs DC ...", and having
+    two lines both start with "Rolled" read oddly stacked together.
+
+    Base items (from the quality tier's own table) and extra treasure
+    (paint, consumables, artifacts, ... from generate_extra_items())
+    come from separate rolls, so they're called out separately rather
+    than folded into one "number of items".
+    """
+    rolled = format_roll(treasure["raw_quality_roll"], treasure["quality_mod"])
+
+    count_phrase = _pluralize(treasure["base_item_count"], "item")
+    if treasure["extra_item_count"] > 0:
+        count_phrase += f' + {_pluralize(treasure["extra_item_count"], "extra")}'
+
+    return (
+        f'Quality roll <span class="recent-roll">{rolled}</span> '
+        f'<span class="meta-badge">= {treasure["quality_roll"]} '
+        f'\u2192 {treasure["quality"]}, {count_phrase}</span>'
+    )
+
+
 def _render_treasure_check_result(result):
     if result.get("blocked"):
         return "<em>No treasure can be found here.</em>"
@@ -848,10 +881,7 @@ def _render_treasure_check_result(result):
     found = result["found_treasure"]
     if found:
         html += (
-            f'<strong>Quality:</strong> {found["quality"]} '
-            f'<span class="recent-roll">(Rolled '
-            f'{format_roll(found["raw_quality_roll"], found["quality_mod"])})</span><br>'
-            f'<strong>Number of Items:</strong> {found["number_of_items"]}<br><br>'
+            f'{_render_quality_roll_line(found)}<br><br>'
             f'{_render_item_list(found["item_list"])}'
         )
     else:
@@ -998,11 +1028,7 @@ def _render_treasure_section():
     return f"""
     <div class="section">
         <strong>Treasure Generated!</strong><br>
-        <strong>Quality:</strong> {treasure['quality']}
-        <span class="recent-roll">
-            (Rolled {format_roll(treasure['raw_quality_roll'], treasure['quality_mod'])})
-        </span><br>
-        <strong>Number of Items:</strong> {treasure['number_of_items']}<br><br>
+        {_render_quality_roll_line(treasure)}<br><br>
         {_render_item_list(treasure['item_list'])}
     </div>
     """
