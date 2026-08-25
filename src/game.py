@@ -933,7 +933,7 @@ def _render_encounter_monsters(latest_encounter):
     if not groups:
         # Shouldn't normally happen (a successful check always rolls at
         # least one group), but render *something* sensible if it ever does.
-        return "<strong>A random encounter occurs!</strong>"
+        return "<em>Something is here.</em>"
 
     requested_level = monsters["requested_level"]
     lines = []
@@ -954,7 +954,7 @@ def _render_encounter_monsters(latest_encounter):
             f"{count_note}{cascade_note}"
         )
 
-    return "<strong>A random encounter occurs!</strong><br>" + "<br>".join(lines)
+    return "<br>".join(lines)
 
 
 def _render_encounter_treasure(latest_encounter):
@@ -968,13 +968,13 @@ def _render_encounter_treasure(latest_encounter):
         # - no roll was even attempted. Say so explicitly rather than
         # silently showing nothing.
         return (
-            '<hr><strong>Loot:</strong><br>'
+            '<hr><strong>Treasure:</strong><br>'
             "<em>This kind of encounter never carries any treasure.</em>"
         )
 
     return f"""
     <hr>
-    <strong>Loot:</strong><br>
+    <strong>Treasure:</strong><br>
     {_render_treasure_check_result(result)}
     """
 
