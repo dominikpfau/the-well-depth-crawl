@@ -893,7 +893,6 @@ def _render_treasure_check_result(result):
 def _render_location_section():
     room = SESSION.get("room")
     level = SESSION.get("level")
-    level_modifiers = SESSION.get("level_modifiers", {})
 
     if not room:
         return (
@@ -907,7 +906,6 @@ def _render_location_section():
     <div class="section">
         <div class="meta-line">
             Level {level} &middot; Depth {room['used_depth']}
-            {_render_meta_badges(level_modifiers)}
         </div>
 
         <strong>Location ({room['location_roll']}):</strong> {room['location']}
@@ -1041,6 +1039,14 @@ def render_page():
 
     depth = SESSION.get("depth", 0)
     level = SESSION.get("level")
+    level_modifiers = SESSION.get("level_modifiers", {})
+
+    modifier_badges = _render_meta_badges(level_modifiers)
+    modifiers_line = (
+        f'<div class="meta-line">Modifiers: {modifier_badges}</div>'
+        if modifier_badges
+        else '<div class="meta-line">Modifiers: <em>none</em></div>'
+    )
 
     form_html = f"""
     <form onsubmit="return false;">
@@ -1053,6 +1059,8 @@ def render_page():
             <label for="depth">Depth:</label>
             <input type="number" id="depth" name="depth" value="{depth}">
         </div>
+
+        {modifiers_line}
 
         <div class="button-row">
             <button type="button" onclick="runAction('room')">Generate Location</button>
