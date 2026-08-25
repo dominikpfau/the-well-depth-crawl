@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<title>Depthcrawl Generator</title>
+<title>Depthcrawling Tool</title>
 <style>
     body {
         font-family: serif;
@@ -183,6 +183,101 @@
         font-size: 0.8rem;
         opacity: 0.6;
     }
+
+    /* ------------------------
+       Page Header (h1 + sidebar toggle, in index.html)
+       ------------------------ */
+    .page-header {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+    }
+
+    .page-header h1 {
+        margin: 0;
+    }
+
+    .page-header .subtitle {
+        margin: 0.1rem 0 0;
+        font-size: 0.8rem;
+        opacity: 0.6;
+        font-style: italic;
+    }
+
+    /* ------------------------
+       Header (dynamic, per render_page())
+       ------------------------ */
+    .header-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.3rem;
+    }
+
+    .sidebar-toggle {
+        font-size: 1.2rem;
+        line-height: 1;
+        padding: 0.35rem 0.7rem;
+    }
+
+    /* ------------------------
+       Sidebar Navigation
+       ------------------------ */
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100%;
+        width: 260px;
+        max-width: 80vw;
+        box-sizing: border-box;
+        background: #232323;
+        border-right: 1px solid #444;
+        padding: 4rem 1rem 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+        transform: translateX(-100%);
+        transition: transform 0.2s ease;
+        z-index: 20;
+    }
+
+    .sidebar.open {
+        transform: translateX(0);
+    }
+
+    .sidebar-link {
+        display: block;
+        width: 100%;
+        text-align: left;
+        background: transparent;
+        border: 1px solid transparent;
+        color: #e0e0e0;
+        margin: 0;
+        padding: 0.6rem 0.8rem;
+    }
+
+    .sidebar-link:hover:not([disabled]) {
+        background: #2f2f2f;
+    }
+
+    .sidebar-link.active {
+        background: #3a3a3a;
+        border-color: #555;
+        font-weight: bold;
+    }
+
+    .sidebar-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 10;
+    }
+
+    .sidebar-backdrop.visible {
+        display: block;
+    }
 </style>
 
 <!-- Pyodide runtime (loaded from CDN - this is the only "server" this app talks to) -->
@@ -191,7 +286,13 @@
 
 <body>
 
-<h1>Depthcrawl Generator</h1>
+<div class="page-header">
+    <button type="button" class="sidebar-toggle" onclick="toggleSidebar()" aria-label="Menu">&#9776;</button>
+    <div>
+        <h1>Depthcrawling Tool</h1>
+        <p class="subtitle">for The Well RPG</p>
+    </div>
+</div>
 <p style="opacity:0.7; font-size:0.9rem;">
 
 </p>
@@ -1472,7 +1573,7 @@ rules) is unchanged. What changed:
     no other visitor to separate sessions from.
   * The Jinja2 template (`templates/index.html`) is replaced by a
     small set of pure-Python HTML-rendering functions
-    (`render_page`, `_render_treasure_result`, ...) that build the same
+    (`render_page`, `_render_location_view`, ...) that build the same
     markup the template used to produce. The CSS/JS shell around it
     now lives in the surrounding .html file instead of Flask.
 """
@@ -2086,9 +2187,10 @@ def _default_session() -> dict:
         "treasure": None,
         "treasure_dc": DEFAULT_TREASURE_DC,
         "encounter_dc": DEFAULT_ENCOUNTER_DC,
-        "latest_encounter": None,
+        "encounter_check": None,
         "level": None,
         "level_modifiers": {},
+        "active_view": "location",
     }
 
 
@@ -2106,14 +2208,18 @@ def _to_int_or_none(value):
     return int(value)
 
 
-def handle_action(action, depth_form=None, level_form=None):
+def handle_action(action, depth_form=None, level_form=None, view_form=None):
     """
     Mirrors the POST branch of the original Flask route.
 
-    `action` is one of "room", "check_encounter", "treasure", "reset",
-    or None (None happens when only the Level dropdown changed, just
-    like the original template's `onchange="this.form.submit()"`
-    produced a plain POST without an `action` field).
+    `action` is one of "room", "check_encounter", "treasure",
+    "switch_view", "reset", or None (None happens when only the Level
+    dropdown changed, just like the original template's
+    `onchange="this.form.submit()"` produced a plain POST without an
+    `action` field).
+
+    `view_form` is only used by "switch_view" - which view
+    ("location" | "encounter" | "treasure") to make active.
     """
     global SESSION
 
@@ -2122,7 +2228,8 @@ def handle_action(action, depth_form=None, level_form=None):
     treasure = SESSION.get("treasure")
     treasure_dc = SESSION.get("treasure_dc", DEFAULT_TREASURE_DC)
     encounter_dc = SESSION.get("encounter_dc", DEFAULT_ENCOUNTER_DC)
-    latest_encounter = SESSION.get("latest_encounter")
+    encounter_check = SESSION.get("encounter_check")
+    active_view = SESSION.get("active_view", "location")
 
     # read depth/level "from the form", same as the Flask version did
     depth_raw = _to_int_or_none(depth_form)
@@ -2146,11 +2253,12 @@ def handle_action(action, depth_form=None, level_form=None):
             "detail": detail,
             "detail_text": DETAIL_DESCRIPTIONS.get(detail, "No description available."),
             "treasure_result": None,
+            "entering_encounter": None,
         }
 
         # --- Roll the treasure hidden in this location, right now.
-        # Unlike the encounter check below, this is shown immediately -
-        # there's no separate "search" step for treasure anymore.
+        # Shown immediately - there's no separate "search" step for
+        # treasure anymore.
         treasure_mods = collect_modifiers(room, trigger="ransack")
         treasure_mods["treasure_roll"] += level_modifiers.get("wealth", 0)
         treasure_mods["treasure_quality"] += level_modifiers.get("wealth", 0)
@@ -2170,70 +2278,69 @@ def handle_action(action, depth_form=None, level_form=None):
             "blocked": treasure_check.get("blocked", False),
         }
 
-        # --- Random encounter check for entering the location.
+        # --- Random encounter check for entering the location. This
+        # belongs to the location itself (shown inside the Location
+        # Generator view), separate from the standalone "Check for
+        # Encounter" result in the Encounter Generator view - they no
+        # longer share a slot, so using one doesn't overwrite the other.
         encounter_mods = collect_modifiers(room, trigger="room")
         encounter_mods["encounter_roll"] += level_modifiers.get("population", 0)
 
         encounter_dc_before = encounter_dc
-        encounter_check = roll_random_encounter(encounter_dc, encounter_mods)
-        encounter_dc = encounter_check["next_dc"]
+        entering_check = roll_random_encounter(encounter_dc, encounter_mods)
+        encounter_dc = entering_check["next_dc"]
 
         monsters = (
             roll_encounter_group(level if level else 1)
-            if encounter_check["success"]
+            if entering_check["success"]
             else None
         )
         monster_treasure = roll_monster_treasure(monsters, level, level_modifiers, treasure_dc)
         if monster_treasure is not None:
             treasure_dc = monster_treasure["next_dc"]
 
-        latest_encounter = {
-            "source": "Entering location",
-            "roll": encounter_check["roll"],
-            "raw_roll": encounter_check["raw_roll"],
-            "mod": encounter_check["mod"],
+        room["entering_encounter"] = {
+            "raw_roll": entering_check["raw_roll"],
+            "mod": entering_check["mod"],
             "dc_before": encounter_dc_before,
             "monsters": monsters,
             "treasure": monster_treasure,
-            "success": encounter_check["success"],
+            "success": entering_check["success"],
         }
 
         depth = used_depth + 1
 
     elif action == "check_encounter":
         # A standalone risk check (e.g. searching around, listening at
-        # a door, ...) - not tied to the location's own treasure at
-        # all (that's already visible from the moment the location
-        # was generated), but an encountered monster can still be
-        # carrying loot of its own - see roll_monster_treasure().
-        # Works even with no location generated yet (room is None):
-        # collect_modifiers() then simply applies no location/detail
-        # modifiers, just the current level's.
+        # a door, ...) shown in its own Encounter Generator view - not
+        # tied to a location's own treasure at all, but an encountered
+        # monster can still be carrying loot of its own - see
+        # roll_monster_treasure(). Works even with no location
+        # generated yet (room is None): collect_modifiers() then simply
+        # applies no location/detail modifiers, just the current level's.
         mods = collect_modifiers(room, trigger="ransack")
         mods["encounter_roll"] += level_modifiers.get("population", 0)
 
         encounter_dc_before = encounter_dc
-        encounter_check = roll_random_encounter(encounter_dc, mods)
-        encounter_dc = encounter_check["next_dc"]
+        check = roll_random_encounter(encounter_dc, mods)
+        encounter_dc = check["next_dc"]
 
         monsters = (
             roll_encounter_group(level if level else 1)
-            if encounter_check["success"]
+            if check["success"]
             else None
         )
         monster_treasure = roll_monster_treasure(monsters, level, level_modifiers, treasure_dc)
         if monster_treasure is not None:
             treasure_dc = monster_treasure["next_dc"]
 
-        latest_encounter = {
-            "source": "Checking for encounter",
-            "roll": encounter_check["roll"],
-            "raw_roll": encounter_check["raw_roll"],
-            "mod": encounter_check["mod"],
+        encounter_check = {
+            "raw_roll": check["raw_roll"],
+            "mod": check["mod"],
             "dc_before": encounter_dc_before,
             "monsters": monsters,
             "treasure": monster_treasure,
-            "success": encounter_check["success"],
+            "success": check["success"],
         }
 
     elif action == "treasure":
@@ -2241,6 +2348,10 @@ def handle_action(action, depth_form=None, level_form=None):
             quality_mod=level_modifiers.get("wealth", 0) if level else 0,
             dungeon_level=room["used_depth"] if room else 1,
         )
+
+    elif action == "switch_view":
+        if view_form in ("location", "encounter", "treasure"):
+            active_view = view_form
 
     elif action == "reset":
         SESSION = _default_session()
@@ -2252,9 +2363,10 @@ def handle_action(action, depth_form=None, level_form=None):
         "treasure": treasure,
         "treasure_dc": treasure_dc,
         "encounter_dc": encounter_dc,
-        "latest_encounter": latest_encounter,
+        "encounter_check": encounter_check,
         "level": level,
         "level_modifiers": level_modifiers,
+        "active_view": active_view,
     }
 
 
@@ -2350,52 +2462,12 @@ def _render_treasure_check_result(result):
     return html
 
 
-def _render_location_section():
-    room = SESSION.get("room")
-    level = SESSION.get("level")
-
-    if not room:
-        return (
-            '<div class="section">'
-            "<strong>Location:</strong><br>"
-            "<em>Press 'Generate Location' to generate a new location.</em>"
-            "</div>"
-        )
-
-    return f"""
-    <div class="section">
-        <div class="meta-line">
-            Level {level} &middot; Depth {room['used_depth']}
-        </div>
-
-        <strong>Location ({room['location_roll']}):</strong> {room['location']}
-        <div class="description">{render_md(room['location_text'])}</div>
-
-        <strong>Detail ({room['detail_roll']}):</strong> {room['detail']}
-        <div class="description">{render_md(room['detail_text'])}</div>
-
-        <hr>
-
-        <strong>Treasure:</strong><br>
-        {_render_treasure_check_result(room["treasure_result"])}
-    </div>
-    """
-
-
-def _render_encounter_monsters(latest_encounter):
-    if not latest_encounter["success"]:
-        return "<em>No encounter.</em>"
-
-    monsters = latest_encounter.get("monsters")
-    groups = monsters.get("groups") if monsters else None
-    if not groups:
-        # Shouldn't normally happen (a successful check always rolls at
-        # least one group), but render *something* sensible if it ever does.
-        return "<em>Something is here.</em>"
-
+def _render_monster_lines(monsters):
+    """Renders the "N× Monster (breakdown)" lines for an encounter's
+    monster groups. Assumes `monsters` is not None and has groups."""
     requested_level = monsters["requested_level"]
     lines = []
-    for group in groups:
+    for group in monsters["groups"]:
         cascade_note = ""
         if group["rolled_on_level"] != requested_level:
             cascade_note = (
@@ -2415,16 +2487,10 @@ def _render_encounter_monsters(latest_encounter):
     return "<br>".join(lines)
 
 
-def _render_encounter_treasure(latest_encounter):
-    if not latest_encounter["success"]:
-        return ""
-
-    result = latest_encounter.get("treasure")
+def _render_encounter_treasure(result):
+    """`result` is a roll_monster_treasure()-shaped dict, or None if
+    every monster present is one that never carries treasure."""
     if result is None:
-        # An encounter happened, but every monster present is one
-        # that never carries treasure (see MONSTERS_WITHOUT_TREASURE)
-        # - no roll was even attempted. Say so explicitly rather than
-        # silently showing nothing.
         return (
             '<hr><strong>Treasure:</strong><br>'
             "<em>This kind of encounter never carries any treasure.</em>"
@@ -2437,108 +2503,200 @@ def _render_encounter_treasure(latest_encounter):
     """
 
 
-def _render_encounter_section():
-    latest_encounter = SESSION.get("latest_encounter")
+def _render_encounter_result(result):
+    """
+    Renders one encounter-check result - shared between a location's
+    own "entering encounter" and the standalone Encounter Generator
+    view, since both produce the exact same shape of result (see
+    handle_action's "room" and "check_encounter" branches).
+    """
+    badge = (
+        '<span class="badge badge-warning">Encounter</span>'
+        if result["success"]
+        else '<span class="badge badge-fail">Safe</span>'
+    )
 
-    if not latest_encounter:
-        return (
+    if result["success"] and result["monsters"] and result["monsters"]["groups"]:
+        body = _render_monster_lines(result["monsters"])
+        treasure_html = _render_encounter_treasure(result["treasure"])
+    else:
+        body = "<em>No encounter.</em>"
+        treasure_html = ""
+
+    return f"""
+    Rolled
+    <span class="recent-roll">
+        {format_roll(result['raw_roll'], result['mod'])}
+    </span>
+    vs DC {result['dc_before']}
+    {badge}
+    <br><br>
+    {body}
+    {treasure_html}
+    """
+
+
+# ----------------------------
+# VIEWS
+# Each view is self-contained: its own controls plus its own result -
+# only one of these is shown at a time (see render_page()).
+# ----------------------------
+
+def _render_location_view():
+    room = SESSION.get("room")
+    depth = SESSION.get("depth", 0)
+
+    controls = f"""
+    <div class="section">
+        <div class="form-row">
+            <label for="depth">Depth:</label>
+            <input type="number" id="depth" name="depth" value="{depth}">
+            <button type="button" onclick="runAction('room')">Generate Location</button>
+        </div>
+    </div>
+    """
+
+    if not room:
+        return controls + (
             '<div class="section">'
-            "<strong>Random Encounter:</strong><br>"
-            "<em>No encounter check yet.</em>"
+            "<em>Press 'Generate Location' to generate a new location.</em>"
             "</div>"
         )
 
-    badge = (
-        '<span class="badge badge-warning">Encounter</span>'
-        if latest_encounter["success"]
-        else '<span class="badge badge-fail">Safe</span>'
-    )
-    result_text = _render_encounter_monsters(latest_encounter)
-    treasure_html = _render_encounter_treasure(latest_encounter)
+    entering_html = ""
+    if room.get("entering_encounter"):
+        entering_html = f"""
+        <hr>
+        <strong>Encounter:</strong><br>
+        {_render_encounter_result(room["entering_encounter"])}
+        """
 
-    return f"""
+    return controls + f"""
     <div class="section">
-        <strong>Random Encounter:</strong><br>
-        <strong>Trigger:</strong> {latest_encounter['source']}<br>
-        Rolled
-        <span class="recent-roll">
-            {format_roll(latest_encounter['raw_roll'], latest_encounter['mod'])}
-        </span>
-        vs DC {latest_encounter['dc_before']}
-        {badge}
-        <br><br>
-        {result_text}
-        {treasure_html}
+        <div class="meta-line">Depth {room['used_depth']}</div>
+
+        <strong>Location ({room['location_roll']}):</strong> {room['location']}
+        <div class="description">{render_md(room['location_text'])}</div>
+
+        <strong>Detail ({room['detail_roll']}):</strong> {room['detail']}
+        <div class="description">{render_md(room['detail_text'])}</div>
+        {entering_html}
+        <hr>
+
+        <strong>Treasure:</strong><br>
+        {_render_treasure_check_result(room["treasure_result"])}
     </div>
     """
 
 
-def _render_treasure_section():
-    treasure = SESSION.get("treasure")
+def _render_encounter_view():
+    result = SESSION.get("encounter_check")
 
-    if not treasure:
-        return (
-            '<div class="section">'
-            "<em>Press 'Generate Treasure' to generate additional treasure.</em>"
-            "</div>"
+    controls = """
+    <div class="section">
+        <button type="button" onclick="runAction('check_encounter')">Check for Encounter</button>
+    </div>
+    """
+
+    if not result:
+        return controls + (
+            '<div class="section"><em>No encounter check yet.</em></div>'
         )
 
-    return f"""
+    return controls + f"""
     <div class="section">
-        <strong>Treasure Generated!</strong><br>
+        {_render_encounter_result(result)}
+    </div>
+    """
+
+
+def _render_treasure_view():
+    treasure = SESSION.get("treasure")
+
+    controls = """
+    <div class="section">
+        <button type="button" onclick="runAction('treasure')">Generate Treasure</button>
+    </div>
+    """
+
+    if not treasure:
+        return controls + (
+            "<div class=\"section\"><em>Press 'Generate Treasure' above to roll.</em></div>"
+        )
+
+    return controls + f"""
+    <div class="section">
         {_render_quality_roll_line(treasure)}<br><br>
         {_render_item_list(treasure['item_list'])}
     </div>
     """
 
 
-def render_page():
-    """Builds the full inner HTML for the #app container, based on
-    the current SESSION state. Equivalent to rendering
-    templates/index.html with Flask/Jinja."""
+# ----------------------------
+# HEADER / SIDEBAR NAVIGATION
+# ----------------------------
 
-    depth = SESSION.get("depth", 0)
+_VIEWS = [
+    ("location", "Location Generator"),
+    ("encounter", "Encounter Generator"),
+    ("treasure", "Treasure Generator"),
+]
+
+
+def _render_header():
     level = SESSION.get("level")
     level_modifiers = SESSION.get("level_modifiers", {})
 
     modifier_badges = _render_meta_badges(level_modifiers)
-    modifiers_line = (
-        f'<div class="meta-line">Modifiers: {modifier_badges}</div>'
-        if modifier_badges
-        else '<div class="meta-line">Modifiers: <em>none</em></div>'
-    )
+    modifiers_text = modifier_badges or "<em>none</em>"
 
-    form_html = f"""
-    <form onsubmit="return false;">
-        <div class="form-row">
-            <label for="level">Level:</label>
-            <select name="level" id="level" onchange="onLevelChange()">
-                {_render_level_options(level)}
-            </select>
-
-            <label for="depth">Depth:</label>
-            <input type="number" id="depth" name="depth" value="{depth}">
-        </div>
-
-        {modifiers_line}
-
-        <div class="button-row">
-            <button type="button" onclick="runAction('room')">Generate Location</button>
-            <button type="button" onclick="runAction('check_encounter')">
-                Check for Encounter
-            </button>
-            <button type="button" onclick="runAction('treasure')">Generate Treasure</button>
-            <button type="button" onclick="runAction('reset')">Reset</button>
-        </div>
-    </form>
+    return f"""
+    <div class="header-row">
+        <label for="level">Level:</label>
+        <select name="level" id="level" onchange="onLevelChange()">
+            {_render_level_options(level)}
+        </select>
+        <button type="button" onclick="runAction('reset')">Reset</button>
+    </div>
+    <div class="meta-line">Modifiers: {modifiers_text}</div>
     """
 
-    return (
-        form_html
-        + _render_encounter_section()
-        + _render_location_section()
-        + _render_treasure_section()
-    )
+
+def _render_sidebar():
+    active_view = SESSION.get("active_view", "location")
+    links = []
+    for view_id, label in _VIEWS:
+        cls = "sidebar-link active" if view_id == active_view else "sidebar-link"
+        links.append(
+            f'<button type="button" class="{cls}" '
+            f'onclick="switchView(\'{view_id}\')">{label}</button>'
+        )
+
+    return f"""
+    <div id="sidebar-backdrop" class="sidebar-backdrop" onclick="closeSidebar()"></div>
+    <nav id="sidebar" class="sidebar">
+        {''.join(links)}
+    </nav>
+    """
+
+
+_VIEW_RENDERERS = {
+    "location": _render_location_view,
+    "encounter": _render_encounter_view,
+    "treasure": _render_treasure_view,
+}
+
+
+def render_page():
+    """Builds the full inner HTML for the #app container, based on
+    the current SESSION state. Only one view's content is rendered at
+    a time (see SESSION["active_view"]); the header/sidebar are always
+    shown regardless of which view is active."""
+
+    active_view = SESSION.get("active_view", "location")
+    view_fn = _VIEW_RENDERERS.get(active_view, _render_location_view)
+
+    return _render_sidebar() + _render_header() + view_fn()
 
 </script>
 
@@ -2553,10 +2711,20 @@ function showError(err) {
 }
 
 function getDepth() {
+    // Returns null if the field isn't in the DOM at all (only the
+    // Location view has a #depth field) - callers must NOT send that
+    // as "0" to handle_action, or depth would silently get reset
+    // every time an action fires from a different view.
     const el = document.getElementById("depth");
-    if (!el || el.value === "") return 0;
+    if (!el) return null;
+    if (el.value === "") return 0;
     const n = parseInt(el.value, 10);
     return Number.isNaN(n) ? 0 : n;
+}
+
+function getDepthArg() {
+    const d = getDepth();
+    return d === null ? null : String(d);
 }
 
 function getLevel() {
@@ -2572,7 +2740,7 @@ function renderApp() {
 
 async function runAction(action) {
     try {
-        pyGame.handle_action(action, String(getDepth()), getLevel());
+        pyGame.handle_action(action, getDepthArg(), getLevel());
         renderApp();
     } catch (err) {
         showError(err);
@@ -2581,11 +2749,39 @@ async function runAction(action) {
 
 async function onLevelChange() {
     try {
-        pyGame.handle_action(null, String(getDepth()), getLevel());
+        pyGame.handle_action(null, getDepthArg(), getLevel());
         renderApp();
     } catch (err) {
         showError(err);
     }
+}
+
+async function switchView(view) {
+    try {
+        pyGame.handle_action("switch_view", getDepthArg(), getLevel(), view);
+        renderApp();
+    } catch (err) {
+        showError(err);
+    }
+}
+
+function toggleSidebar() {
+    // The toggle button now lives in the static page header (outside
+    // #app), so it's clickable even before Pyodide has finished
+    // loading and rendered the sidebar itself - guard against that.
+    const sidebar = document.getElementById("sidebar");
+    const backdrop = document.getElementById("sidebar-backdrop");
+    if (!sidebar || !backdrop) return;
+    sidebar.classList.toggle("open");
+    backdrop.classList.toggle("visible");
+}
+
+function closeSidebar() {
+    const sidebar = document.getElementById("sidebar");
+    const backdrop = document.getElementById("sidebar-backdrop");
+    if (!sidebar) return;
+    sidebar.classList.remove("open");
+    if (backdrop) backdrop.classList.remove("visible");
 }
 
 /**

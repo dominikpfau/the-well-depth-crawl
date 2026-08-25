@@ -8,10 +8,20 @@ function showError(err) {
 }
 
 function getDepth() {
+    // Returns null if the field isn't in the DOM at all (only the
+    // Location view has a #depth field) - callers must NOT send that
+    // as "0" to handle_action, or depth would silently get reset
+    // every time an action fires from a different view.
     const el = document.getElementById("depth");
-    if (!el || el.value === "") return 0;
+    if (!el) return null;
+    if (el.value === "") return 0;
     const n = parseInt(el.value, 10);
     return Number.isNaN(n) ? 0 : n;
+}
+
+function getDepthArg() {
+    const d = getDepth();
+    return d === null ? null : String(d);
 }
 
 function getLevel() {
@@ -27,7 +37,7 @@ function renderApp() {
 
 async function runAction(action) {
     try {
-        pyGame.handle_action(action, String(getDepth()), getLevel());
+        pyGame.handle_action(action, getDepthArg(), getLevel());
         renderApp();
     } catch (err) {
         showError(err);
@@ -36,11 +46,39 @@ async function runAction(action) {
 
 async function onLevelChange() {
     try {
-        pyGame.handle_action(null, String(getDepth()), getLevel());
+        pyGame.handle_action(null, getDepthArg(), getLevel());
         renderApp();
     } catch (err) {
         showError(err);
     }
+}
+
+async function switchView(view) {
+    try {
+        pyGame.handle_action("switch_view", getDepthArg(), getLevel(), view);
+        renderApp();
+    } catch (err) {
+        showError(err);
+    }
+}
+
+function toggleSidebar() {
+    // The toggle button now lives in the static page header (outside
+    // #app), so it's clickable even before Pyodide has finished
+    // loading and rendered the sidebar itself - guard against that.
+    const sidebar = document.getElementById("sidebar");
+    const backdrop = document.getElementById("sidebar-backdrop");
+    if (!sidebar || !backdrop) return;
+    sidebar.classList.toggle("open");
+    backdrop.classList.toggle("visible");
+}
+
+function closeSidebar() {
+    const sidebar = document.getElementById("sidebar");
+    const backdrop = document.getElementById("sidebar-backdrop");
+    if (!sidebar) return;
+    sidebar.classList.remove("open");
+    if (backdrop) backdrop.classList.remove("visible");
 }
 
 /**
