@@ -38,6 +38,16 @@ function getCheckbox(id) {
     return el ? el.checked : null;
 }
 
+function getIntFieldArg(id) {
+    // The Encounter DC / Treasure DC fields in the header are always
+    // present (any view), but guard the same way as getDepth() in
+    // case of an empty/invalid value - null means "don't touch it".
+    const el = document.getElementById(id);
+    if (!el || el.value === "") return null;
+    const n = parseInt(el.value, 10);
+    return Number.isNaN(n) ? null : String(n);
+}
+
 function renderApp() {
     const html = pyGame.render_page();
     document.getElementById("app").innerHTML = html;
@@ -52,7 +62,9 @@ async function runAction(action) {
             null,
             getCheckbox("roll-treasure"),
             getCheckbox("roll-encounter"),
-            getCheckbox("encounter-roll-treasure")
+            getCheckbox("encounter-roll-treasure"),
+            getIntFieldArg("encounter-dc"),
+            getIntFieldArg("treasure-dc")
         );
         renderApp();
     } catch (err) {
@@ -69,7 +81,9 @@ async function onLevelChange() {
             null,
             getCheckbox("roll-treasure"),
             getCheckbox("roll-encounter"),
-            getCheckbox("encounter-roll-treasure")
+            getCheckbox("encounter-roll-treasure"),
+            getIntFieldArg("encounter-dc"),
+            getIntFieldArg("treasure-dc")
         );
         renderApp();
     } catch (err) {
@@ -86,7 +100,9 @@ async function switchView(view) {
             view,
             getCheckbox("roll-treasure"),
             getCheckbox("roll-encounter"),
-            getCheckbox("encounter-roll-treasure")
+            getCheckbox("encounter-roll-treasure"),
+            getIntFieldArg("encounter-dc"),
+            getIntFieldArg("treasure-dc")
         );
         renderApp();
     } catch (err) {

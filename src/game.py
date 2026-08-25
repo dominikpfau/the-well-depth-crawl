@@ -658,15 +658,17 @@ def handle_action(
     roll_treasure_form=None,
     roll_encounter_form=None,
     encounter_roll_treasure_form=None,
+    encounter_dc_form=None,
+    treasure_dc_form=None,
 ):
     """
     Mirrors the POST branch of the original Flask route.
 
     `action` is one of "room", "check_encounter", "generate_encounter",
-    "treasure", "switch_view", "reset", or None (None happens when
-    only the Level dropdown changed, just like the original
-    template's `onchange="this.form.submit()"` produced a plain POST
-    without an `action` field).
+    "treasure", "check_treasure", "switch_view", "reset", or None
+    (None happens when only the Level dropdown changed, just like the
+    original template's `onchange="this.form.submit()"` produced a
+    plain POST without an `action` field).
 
     `view_form` is only used by "switch_view" - which view
     ("location" | "encounter" | "treasure") to make active.
@@ -683,6 +685,11 @@ def handle_action(
     Location Generator's) - controls whether an encountered monster's
     own loot is even attempted, for both "check_encounter" and
     "generate_encounter".
+
+    `encounter_dc_form` / `treasure_dc_form` are the two DC fields in
+    the header (always present, any view) - like `depth_form`, they
+    let the person directly edit the shared running DC pools instead
+    of just watching them drift from rolls.
     """
     global SESSION
 
@@ -704,6 +711,14 @@ def handle_action(
 
     level = _to_int_or_none(level_form)
     level_modifiers = LEVEL_MODIFIERS.get(level, {})
+
+    encounter_dc_raw = _to_int_or_none(encounter_dc_form)
+    if encounter_dc_raw is not None:
+        encounter_dc = encounter_dc_raw
+
+    treasure_dc_raw = _to_int_or_none(treasure_dc_form)
+    if treasure_dc_raw is not None:
+        treasure_dc = treasure_dc_raw
 
     if roll_treasure_form is not None:
         roll_treasure = bool(roll_treasure_form)
@@ -1286,6 +1301,8 @@ _VIEWS = [
 def _render_header():
     level = SESSION.get("level")
     level_modifiers = SESSION.get("level_modifiers", {})
+    encounter_dc = SESSION.get("encounter_dc", DEFAULT_ENCOUNTER_DC)
+    treasure_dc = SESSION.get("treasure_dc", DEFAULT_TREASURE_DC)
 
     modifier_badges = _render_meta_badges(level_modifiers)
     modifiers_text = modifier_badges or "<em>none</em>"
@@ -1296,7 +1313,10 @@ def _render_header():
         <select name="level" id="level" onchange="onLevelChange()">
             {_render_level_options(level)}
         </select>
-        <button type="button" onclick="runAction('reset')">Reset</button>
+        <label for="encounter-dc">Encounter DC:</label>
+        <input type="number" id="encounter-dc" name="encounter-dc" value="{encounter_dc}">
+        <label for="treasure-dc">Treasure DC:</label>
+        <input type="number" id="treasure-dc" name="treasure-dc" value="{treasure_dc}">
     </div>
     <div class="meta-line">Modifiers: {modifiers_text}</div>
     """
