@@ -51,7 +51,8 @@ async function runAction(action) {
             getLevel(),
             null,
             getCheckbox("roll-treasure"),
-            getCheckbox("roll-encounter")
+            getCheckbox("roll-encounter"),
+            getCheckbox("encounter-roll-treasure")
         );
         renderApp();
     } catch (err) {
@@ -67,7 +68,8 @@ async function onLevelChange() {
             getLevel(),
             null,
             getCheckbox("roll-treasure"),
-            getCheckbox("roll-encounter")
+            getCheckbox("roll-encounter"),
+            getCheckbox("encounter-roll-treasure")
         );
         renderApp();
     } catch (err) {
@@ -83,7 +85,8 @@ async function switchView(view) {
             getLevel(),
             view,
             getCheckbox("roll-treasure"),
-            getCheckbox("roll-encounter")
+            getCheckbox("roll-encounter"),
+            getCheckbox("encounter-roll-treasure")
         );
         renderApp();
     } catch (err) {

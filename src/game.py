@@ -632,6 +632,7 @@ def _default_session() -> dict:
         "active_view": "location",
         "roll_treasure": True,
         "roll_encounter": True,
+        "encounter_roll_treasure": True,
     }
 
 
@@ -656,15 +657,16 @@ def handle_action(
     view_form=None,
     roll_treasure_form=None,
     roll_encounter_form=None,
+    encounter_roll_treasure_form=None,
 ):
     """
     Mirrors the POST branch of the original Flask route.
 
-    `action` is one of "room", "check_encounter", "treasure",
-    "switch_view", "reset", or None (None happens when only the Level
-    dropdown changed, just like the original template's
-    `onchange="this.form.submit()"` produced a plain POST without an
-    `action` field).
+    `action` is one of "room", "check_encounter", "generate_encounter",
+    "treasure", "switch_view", "reset", or None (None happens when
+    only the Level dropdown changed, just like the original
+    template's `onchange="this.form.submit()"` produced a plain POST
+    without an `action` field).
 
     `view_form` is only used by "switch_view" - which view
     ("location" | "encounter" | "treasure") to make active.
@@ -675,6 +677,12 @@ def handle_action(
     They control whether "room" rolls for treasure / an entering
     encounter at all; when off, that part of the location isn't
     rolled - and so isn't shown - rather than being rolled and hidden.
+
+    `encounter_roll_treasure_form` is the Encounter Generator's own
+    "Roll for Treasure" checkbox (separate preference from the
+    Location Generator's) - controls whether an encountered monster's
+    own loot is even attempted, for both "check_encounter" and
+    "generate_encounter".
     """
     global SESSION
 
@@ -687,6 +695,7 @@ def handle_action(
     active_view = SESSION.get("active_view", "location")
     roll_treasure = SESSION.get("roll_treasure", True)
     roll_encounter = SESSION.get("roll_encounter", True)
+    encounter_roll_treasure = SESSION.get("encounter_roll_treasure", True)
 
     # read depth/level "from the form", same as the Flask version did
     depth_raw = _to_int_or_none(depth_form)
@@ -700,6 +709,8 @@ def handle_action(
         roll_treasure = bool(roll_treasure_form)
     if roll_encounter_form is not None:
         roll_encounter = bool(roll_encounter_form)
+    if encounter_roll_treasure_form is not None:
+        encounter_roll_treasure = bool(encounter_roll_treasure_form)
 
     if action == "room":
         used_depth = depth
@@ -799,17 +810,49 @@ def handle_action(
             if check["success"]
             else None
         )
-        monster_treasure = roll_monster_treasure(monsters, level, level_modifiers, treasure_dc)
+        monster_treasure = (
+            roll_monster_treasure(monsters, level, level_modifiers, treasure_dc)
+            if encounter_roll_treasure
+            else None
+        )
         if monster_treasure is not None:
             treasure_dc = monster_treasure["next_dc"]
 
         encounter_check = {
+            "mode": "rolled",
             "raw_roll": check["raw_roll"],
             "mod": check["mod"],
             "dc_before": encounter_dc_before,
             "monsters": monsters,
             "treasure": monster_treasure,
             "success": check["success"],
+        }
+
+    elif action == "generate_encounter":
+        # Skips the "does an encounter even happen" DC check entirely
+        # and just directly rolls a monster group - the Encounter
+        # Generator's equivalent of the Treasure Generator's
+        # unconditional "Generate Treasure" button. Doesn't touch
+        # encounter_dc, since no check actually happened; the
+        # monster's own loot (if any) is still a real DC-gated
+        # treasure roll though, same as everywhere else.
+        monsters = roll_encounter_group(level if level else 1)
+        monster_treasure = (
+            roll_monster_treasure(monsters, level, level_modifiers, treasure_dc)
+            if encounter_roll_treasure
+            else None
+        )
+        if monster_treasure is not None:
+            treasure_dc = monster_treasure["next_dc"]
+
+        encounter_check = {
+            "mode": "generated",
+            "raw_roll": None,
+            "mod": None,
+            "dc_before": None,
+            "monsters": monsters,
+            "treasure": monster_treasure,
+            "success": True,
         }
 
     elif action == "treasure":
@@ -838,6 +881,7 @@ def handle_action(
         "active_view": active_view,
         "roll_treasure": roll_treasure,
         "roll_encounter": roll_encounter,
+        "encounter_roll_treasure": encounter_roll_treasure,
     }
 
 
@@ -978,14 +1022,29 @@ def _render_encounter_result(result, show_treasure=True):
     """
     Renders one encounter-check result - shared between a location's
     own "entering encounter" and the standalone Encounter Generator
-    view, since both produce the exact same shape of result (see
-    handle_action's "room" and "check_encounter" branches).
+    view, since both produce the same shape of result (see
+    handle_action's "room", "check_encounter", and "generate_encounter"
+    branches).
 
     `show_treasure=False` omits the Treasure sub-section entirely -
     used for a location's entering encounter, which never carries its
     own treasure (see handle_action's "room" branch), so there's
     nothing to explain there, not even a "carries no treasure" note.
+
+    `result["mode"] == "generated"` (from "generate_encounter") skips
+    the "Rolled ... vs DC ..." framing entirely, since no check
+    actually happened there - mirrors how the Treasure Generator's
+    unconditional "Generate Treasure" skips DC framing too.
     """
+    if result.get("mode") == "generated":
+        body = (
+            _render_monster_lines(result["monsters"])
+            if result["monsters"] and result["monsters"]["groups"]
+            else "<em>Nothing generated.</em>"
+        )
+        treasure_html = _render_encounter_treasure(result["treasure"]) if show_treasure else ""
+        return f"{body}\n    {treasure_html}"
+
     badge = (
         '<span class="badge badge-warning">Encounter</span>'
         if result["success"]
@@ -1089,16 +1148,32 @@ def _render_location_view():
 
 def _render_encounter_view():
     result = SESSION.get("encounter_check")
+    roll_treasure = SESSION.get("encounter_roll_treasure", True)
+    treasure_checked = "checked" if roll_treasure else ""
 
-    controls = """
+    controls = f"""
     <div class="section">
-        <button type="button" onclick="runAction('check_encounter')">Check for Encounter</button>
+        <div class="form-row checkbox-row">
+            <label>
+                <input type="checkbox" id="encounter-roll-treasure" {treasure_checked}>
+                Roll for Treasure
+            </label>
+        </div>
+        <button type="button" class="primary-action" onclick="runAction('check_encounter')">
+            Roll for Encounter
+        </button>
+        <button type="button" onclick="runAction('generate_encounter')">
+            Generate Encounter
+        </button>
     </div>
     """
 
     if not result:
         return controls + (
-            '<div class="section"><em>No encounter check yet.</em></div>'
+            '<div class="section"><em>'
+            "Press 'Roll for Encounter' or 'Generate Encounter' above "
+            "to get started."
+            '</em></div>'
         )
 
     return controls + f"""
