@@ -1744,29 +1744,71 @@ def _half_level(level: int) -> int:
     return level // 2  # rounds down (level 3 -> 1)
 
 
-def _roll_formula_term(term: str, level: int) -> int:
+def _roll_formula_term_detailed(term: str, level: int) -> tuple:
+    """Like _roll_formula_term(), but also returns a short human-
+    readable fragment describing what was rolled, e.g. "1d6\u21924" or
+    "half-level\u21922"."""
     term = term.strip()
 
     dice_match = _DICE_RE.match(term)
     if dice_match:
         count, sides = int(dice_match.group(1)), int(dice_match.group(2))
-        return sum(random.randint(1, sides) for _ in range(count))
+        rolls = [random.randint(1, sides) for _ in range(count)]
+        total = sum(rolls)
+        if count > 1:
+            return total, f"{term}\u2192{'+'.join(str(r) for r in rolls)}"
+        return total, f"{term}\u2192{total}"
 
     range_match = _RANGE_RE.match(term)
     if range_match:
         low, high = int(range_match.group(1)), int(range_match.group(2))
-        return random.randint(low, high)
+        value = random.randint(low, high)
+        return value, f"{term}\u2192{value}"
 
     normalized = term.lower().replace("_", "-").replace(" ", "-")
     if normalized == "level":
-        return level
+        return level, f"level\u2192{level}"
     if normalized == "half-level":
-        return _half_level(level)
+        value = _half_level(level)
+        return value, f"half-level\u2192{value}"
 
     if _INT_RE.match(term):
-        return int(term)
+        return int(term), term
 
     raise ValueError(f"Can't parse encounter formula term {term!r}.")
+
+
+def _roll_formula_term(term: str, level: int) -> int:
+    value, _ = _roll_formula_term_detailed(term, level)
+    return value
+
+
+def roll_monster_count_detailed(formula: str, level: int) -> tuple:
+    """
+    Evaluates a monster's "number formula" (e.g. "3-5 + half-level")
+    for the given dungeon level, returning (count, description) - the
+    resulting number (never less than 1) plus a short human-readable
+    breakdown of how it was rolled, for display in the UI.
+    """
+    parts = re.split(r"\s+([+-])\s+", formula.strip())
+    value, first_desc = _roll_formula_term_detailed(parts[0], level)
+    total = value
+    desc_parts = [first_desc]
+
+    i = 1
+    while i < len(parts):
+        sign_str, term = parts[i], parts[i + 1]
+        term_value, term_desc = _roll_formula_term_detailed(term, level)
+        total += term_value if sign_str == "+" else -term_value
+        desc_parts.append(f"{sign_str} {term_desc}")
+        i += 2
+
+    clamped = max(1, total)
+    description = " ".join(desc_parts)
+    if len(desc_parts) > 1 or clamped != total:
+        description = f"{description} = {clamped}"
+
+    return clamped, description
 
 
 def roll_monster_count(formula: str, level: int) -> int:
@@ -1775,17 +1817,8 @@ def roll_monster_count(formula: str, level: int) -> int:
     for the given dungeon level, returning how many of that monster
     appear in one group. The result is never less than 1.
     """
-    parts = re.split(r"\s+([+-])\s+", formula.strip())
-    total = _roll_formula_term(parts[0], level)
-
-    i = 1
-    while i < len(parts):
-        sign_str, term = parts[i], parts[i + 1]
-        value = _roll_formula_term(term, level)
-        total += value if sign_str == "+" else -value
-        i += 2
-
-    return max(1, total)
+    value, _ = roll_monster_count_detailed(formula, level)
+    return value
 
 
 _MAX_ENCOUNTER_SUBROLLS = 50
@@ -1863,9 +1896,15 @@ def _roll_encounter_groups_at(level: int, budget: _RollBudget) -> list:
                 + _roll_encounter_groups_at(current_level, budget)
             )
 
-        count = sum(
-            roll_monster_count(MONSTERS[entry["monster"]], current_level)
+        rolls = [
+            roll_monster_count_detailed(MONSTERS[entry["monster"]], current_level)
             for _ in range(entry["multiplier"])
+        ]
+        count = sum(value for value, _ in rolls)
+        count_breakdown = (
+            rolls[0][1]
+            if len(rolls) == 1
+            else " + ".join(f"({desc})" for _, desc in rolls) + f" = {count}"
         )
         return [{
             "rolled_on_level": current_level,
@@ -1875,22 +1914,30 @@ def _roll_encounter_groups_at(level: int, budget: _RollBudget) -> list:
             "monster": entry["monster"],
             "multiplier": entry["multiplier"],
             "count": count,
+            "count_breakdown": count_breakdown,
         }]
 
 
-def roll_monster_treasure(monsters, level, level_modifiers):
+def roll_monster_treasure(monsters, level, level_modifiers, current_dc):
     """
-    Rolls the treasure carried by an encountered monster group, using
-    only the current dungeon level's modifiers (LEVEL_MODIFIERS
-    "wealth") - deliberately *not* the location/detail modifiers that
-    apply to a location's own treasure, since this loot belongs to the
-    monster(s), not the place they were found in.
+    Rolls (against `current_dc` - the same running "treasure DC" a
+    location's own treasure uses) whether an encountered monster
+    group is carrying treasure, using only the current dungeon
+    level's modifiers (LEVEL_MODIFIERS "wealth") - deliberately *not*
+    the location/detail modifiers a location's own treasure uses,
+    since this loot belongs to the monster(s), not the place they
+    were found in.
 
-    Returns None if there's nothing to roll for (no encounter, or
-    every monster present is in MONSTERS_WITHOUT_TREASURE - e.g. a
-    plain "Critters" swarm never carries loot). If an encounter mixes
-    a treasure-less monster with one that can carry treasure, this
-    still rolls (once) for the encounter as a whole.
+    Returns None if there's nothing to roll for at all (no encounter,
+    or every monster present is in MONSTERS_WITHOUT_TREASURE - e.g. a
+    plain "Critters" swarm never carries loot, no roll even attempted).
+    If an encounter mixes a treasure-less monster with one that can
+    carry treasure, this still rolls (once) for the encounter as a
+    whole.
+
+    Otherwise returns a dict shaped exactly like
+    roll_location_treasure()'s result: "roll", "raw_roll", "mod",
+    "success", "treasure" (None on failure), "next_dc".
     """
     if not monsters:
         return None
@@ -1899,10 +1946,27 @@ def roll_monster_treasure(monsters, level, level_modifiers):
     if not (monster_names - MONSTERS_WITHOUT_TREASURE):
         return None
 
-    return generate_treasure(
-        quality_mod=level_modifiers.get("wealth", 0) if level else 0,
-        dungeon_level=level if level else 1,
+    wealth_mod = level_modifiers.get("wealth", 0) if level else 0
+    mods = {
+        "treasure_roll": wealth_mod,
+        "treasure_quality": wealth_mod,
+        "encounter_roll": 0,
+        "no_treasure": False,
+    }
+    raw_result = roll_location_treasure(
+        current_dc, mods, dungeon_level=level if level else 1
     )
+
+    # Normalize to the same shape room["treasure_result"] uses, so
+    # _render_treasure_check_result() can render either one.
+    return {
+        "raw_roll": raw_result["raw_roll"],
+        "mod": raw_result["mod"],
+        "treasure_dc_before": current_dc,
+        "found_treasure": raw_result["treasure"],
+        "blocked": raw_result.get("blocked", False),
+        "next_dc": raw_result["next_dc"],
+    }
 
 
 def _validate_encounter_data() -> None:
@@ -2117,7 +2181,9 @@ def handle_action(action, depth_form=None, level_form=None):
             if encounter_check["success"]
             else None
         )
-        monster_treasure = roll_monster_treasure(monsters, level, level_modifiers)
+        monster_treasure = roll_monster_treasure(monsters, level, level_modifiers, treasure_dc)
+        if monster_treasure is not None:
+            treasure_dc = monster_treasure["next_dc"]
 
         latest_encounter = {
             "source": "Entering location",
@@ -2153,7 +2219,9 @@ def handle_action(action, depth_form=None, level_form=None):
             if encounter_check["success"]
             else None
         )
-        monster_treasure = roll_monster_treasure(monsters, level, level_modifiers)
+        monster_treasure = roll_monster_treasure(monsters, level, level_modifiers, treasure_dc)
+        if monster_treasure is not None:
+            treasure_dc = monster_treasure["next_dc"]
 
         latest_encounter = {
             "source": "Checking for encounter",
@@ -2221,8 +2289,7 @@ def _render_item_list(item_list):
     return "".join(f"\u2022 {item}<br>" for item in item_list)
 
 
-def _render_treasure_result(room):
-    result = room["treasure_result"]
+def _render_treasure_check_result(result):
     if result.get("blocked"):
         return "<em>No treasure can be found here.</em>"
 
@@ -2283,7 +2350,7 @@ def _render_location_section():
         <hr>
 
         <strong>Treasure:</strong><br>
-        {_render_treasure_result(room)}
+        {_render_treasure_check_result(room["treasure_result"])}
     </div>
     """
 
@@ -2308,29 +2375,28 @@ def _render_encounter_monsters(latest_encounter):
                 f' <span class="meta-badge">rolled on Level '
                 f'{group["rolled_on_level"]} table</span>'
             )
-        row_die, col_die = group["dice"]
+
+        count_note = ""
+        if group["count"] > 1:
+            count_note = f' <span class="meta-badge">{group["count_breakdown"]}</span>'
+
         lines.append(
             f'<span class="recent-roll">{group["count"]}&times; {group["monster"]}</span>'
-            f" (row d6: {row_die} \u2192 row {group['row']}, column d6: {col_die}){cascade_note}"
+            f"{count_note}{cascade_note}"
         )
 
     return "<strong>A random encounter occurs!</strong><br>" + "<br>".join(lines)
 
 
 def _render_encounter_treasure(latest_encounter):
-    treasure = latest_encounter.get("treasure")
-    if not treasure:
+    result = latest_encounter.get("treasure")
+    if not result:
         return ""
 
     return f"""
     <hr>
     <strong>Loot:</strong><br>
-    <strong>Quality:</strong> {treasure['quality']}
-    <span class="recent-roll">
-        (Rolled {format_roll(treasure['raw_quality_roll'], treasure['quality_mod'])})
-    </span><br>
-    <strong>Number of Items:</strong> {treasure['number_of_items']}<br><br>
-    {_render_item_list(treasure['item_list'])}
+    {_render_treasure_check_result(result)}
     """
 
 
