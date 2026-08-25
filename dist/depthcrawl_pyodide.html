@@ -2451,11 +2451,50 @@ def handle_action(
             "success": True,
         }
 
+    elif action == "check_treasure":
+        # The Treasure Generator's DC-gated counterpart to "treasure"
+        # below - a real check against the same shared treasure_dc
+        # pool everything else uses, using only the current level's
+        # wealth modifier (no location/detail context, same as
+        # roll_monster_treasure()). Can fail ("nothing found").
+        wealth_mod = level_modifiers.get("wealth", 0) if level else 0
+        mods = {
+            "treasure_roll": wealth_mod,
+            "treasure_quality": wealth_mod,
+            "encounter_roll": 0,
+            "no_treasure": False,
+        }
+        treasure_dc_before = treasure_dc
+        check = roll_location_treasure(
+            treasure_dc, mods, dungeon_level=level if level else 1
+        )
+        treasure_dc = check["next_dc"]
+
+        treasure = {
+            "mode": "rolled",
+            "raw_roll": check["raw_roll"],
+            "mod": check["mod"],
+            "treasure_dc_before": treasure_dc_before,
+            "found_treasure": check["treasure"],
+            "blocked": check.get("blocked", False),
+        }
+
     elif action == "treasure":
-        treasure = generate_treasure(
+        # Unconditional - always finds something, no DC check, no
+        # treasure_dc consumption. The Treasure Generator's equivalent
+        # of the Encounter Generator's "generate_encounter".
+        generated = generate_treasure(
             quality_mod=level_modifiers.get("wealth", 0) if level else 0,
             dungeon_level=room["used_depth"] if room else 1,
         )
+        treasure = {
+            "mode": "generated",
+            "raw_roll": None,
+            "mod": None,
+            "treasure_dc_before": None,
+            "found_treasure": generated,
+            "blocked": False,
+        }
 
     elif action == "switch_view":
         if view_form in ("location", "encounter", "treasure"):
@@ -2545,7 +2584,9 @@ def _render_quality_roll_line(treasure):
     )
 
 
-def _render_treasure_check_result(result):
+def _render_treasure_check_result(
+    result, fail_message="There doesn't seem to be anything of value here."
+):
     if result.get("blocked"):
         return "<em>No treasure can be found here.</em>"
 
@@ -2568,7 +2609,7 @@ def _render_treasure_check_result(result):
             f'{_render_item_list(found["item_list"])}'
         )
     else:
-        html += "<em>There doesn't seem to be anything of value here.</em>"
+        html += f"<em>{fail_message}</em>"
 
     return html
 
@@ -2779,24 +2820,50 @@ def _render_encounter_view():
     """
 
 
+def _render_treasure_view_result(result):
+    """
+    Renders the standalone Treasure Generator's current result -
+    either a DC-gated "Roll for Treasure" outcome (can fail) or an
+    unconditional "Generate Treasure" one (always finds something, no
+    DC framing) - mirrors _render_encounter_result's "generated" mode.
+    """
+    if result.get("mode") == "generated":
+        found = result["found_treasure"]
+        return f"""
+        {_render_quality_roll_line(found)}<br><br>
+        {_render_item_list(found['item_list'])}
+        """
+
+    return _render_treasure_check_result(
+        result, fail_message="Nothing turns up this time."
+    )
+
+
 def _render_treasure_view():
     treasure = SESSION.get("treasure")
 
     controls = """
     <div class="section">
-        <button type="button" onclick="runAction('treasure')">Generate Treasure</button>
+        <button type="button" class="primary-action" onclick="runAction('check_treasure')">
+            Roll for Treasure
+        </button>
+        <button type="button" onclick="runAction('treasure')">
+            Generate Treasure
+        </button>
     </div>
     """
 
     if not treasure:
         return controls + (
-            "<div class=\"section\"><em>Press 'Generate Treasure' above to roll.</em></div>"
+            '<div class="section"><em>'
+            "Press 'Roll for Treasure' or 'Generate Treasure' above "
+            "to get started."
+            "</em></div>"
         )
 
     return controls + f"""
     <div class="section">
-        {_render_quality_roll_line(treasure)}<br><br>
-        {_render_item_list(treasure['item_list'])}
+        {_render_treasure_view_result(treasure)}
     </div>
     """
 
