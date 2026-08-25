@@ -848,7 +848,6 @@ def _render_treasure_check_result(result):
     found = result["found_treasure"]
     if found:
         html += (
-            "<strong>Treasure Found!</strong><br>"
             f'<strong>Quality:</strong> {found["quality"]} '
             f'<span class="recent-roll">(Rolled '
             f'{format_roll(found["raw_quality_roll"], found["quality_mod"])})</span><br>'
@@ -856,7 +855,7 @@ def _render_treasure_check_result(result):
             f'{_render_item_list(found["item_list"])}'
         )
     else:
-        html += "<em>No treasure was found here.</em>"
+        html += "<em>There doesn't seem to be anything of value here.</em>"
 
     return html
 
@@ -929,9 +928,19 @@ def _render_encounter_monsters(latest_encounter):
 
 
 def _render_encounter_treasure(latest_encounter):
-    result = latest_encounter.get("treasure")
-    if not result:
+    if not latest_encounter["success"]:
         return ""
+
+    result = latest_encounter.get("treasure")
+    if result is None:
+        # An encounter happened, but every monster present is one
+        # that never carries treasure (see MONSTERS_WITHOUT_TREASURE)
+        # - no roll was even attempted. Say so explicitly rather than
+        # silently showing nothing.
+        return (
+            '<hr><strong>Loot:</strong><br>'
+            "<em>This kind of encounter never carries any treasure.</em>"
+        )
 
     return f"""
     <hr>
