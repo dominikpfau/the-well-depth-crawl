@@ -636,6 +636,8 @@ def _default_session() -> dict:
         "roll_treasure": True,
         "roll_encounter": True,
         "encounter_roll_treasure": True,
+        "forced_location": None,
+        "forced_detail": None,
     }
 
 
@@ -653,7 +655,10 @@ def _to_int_or_none(value):
     return int(value)
 
 
-def _generate_room(used_depth, level, level_modifiers, roll_treasure, roll_encounter, treasure_dc, encounter_dc):
+def _generate_room(
+    used_depth, level, level_modifiers, roll_treasure, roll_encounter,
+    treasure_dc, encounter_dc, forced_location=None, forced_detail=None,
+):
     """
     Rolls a fresh location at `used_depth` - optionally its own
     treasure and an entering encounter, depending on the two flags.
@@ -662,11 +667,24 @@ def _generate_room(used_depth, level, level_modifiers, roll_treasure, roll_encou
     and Crawling Mode's "go_deeper" (where both are always True - no
     checkboxes there).
 
+    `forced_location` / `forced_detail`, if given, are used directly
+    instead of rolling on LOCATIONS / DETAILS (the Location
+    Generator's two dropdowns - Crawling Mode never sets these, it
+    always rolls randomly). The room's "location_roll"/"detail_roll"
+    are then None, since nothing was actually rolled for that part.
+
     Returns (room, treasure_dc, encounter_dc) - the room, plus the
     shared DC pools after whichever rolls happened.
     """
-    loc_roll, location = roll_table(LOCATIONS, used_depth)
-    det_roll, detail = roll_table(DETAILS, used_depth)
+    if forced_location:
+        loc_roll, location = None, forced_location
+    else:
+        loc_roll, location = roll_table(LOCATIONS, used_depth)
+
+    if forced_detail:
+        det_roll, detail = None, forced_detail
+    else:
+        det_roll, detail = roll_table(DETAILS, used_depth)
 
     room = {
         "used_depth": used_depth,
@@ -746,6 +764,8 @@ def handle_action(
     encounter_roll_treasure_form=None,
     encounter_dc_form=None,
     treasure_dc_form=None,
+    location_form=None,
+    detail_form=None,
 ):
     """
     Mirrors the POST branch of the original Flask route.
@@ -776,6 +796,11 @@ def handle_action(
     the header (always present, any view) - like `depth_form`, they
     let the person directly edit the shared running DC pools instead
     of just watching them drift from rolls.
+
+    `location_form` / `detail_form` are the Location Generator's two
+    dropdowns for picking a specific location/detail by name instead
+    of rolling for it - empty string (or None, meaning "field not in
+    the DOM right now") means "Random", the usual roll.
     """
     global SESSION
 
@@ -792,6 +817,8 @@ def handle_action(
     roll_treasure = SESSION.get("roll_treasure", True)
     roll_encounter = SESSION.get("roll_encounter", True)
     encounter_roll_treasure = SESSION.get("encounter_roll_treasure", True)
+    forced_location = SESSION.get("forced_location")
+    forced_detail = SESSION.get("forced_detail")
 
     # read depth/level "from the form", same as the Flask version did
     depth_raw = _to_int_or_none(depth_form)
@@ -809,6 +836,11 @@ def handle_action(
     if treasure_dc_raw is not None:
         treasure_dc = treasure_dc_raw
 
+    if location_form is not None:
+        forced_location = location_form or None
+    if detail_form is not None:
+        forced_detail = detail_form or None
+
     if roll_treasure_form is not None:
         roll_treasure = bool(roll_treasure_form)
     if roll_encounter_form is not None:
@@ -821,6 +853,7 @@ def handle_action(
         room, treasure_dc, encounter_dc = _generate_room(
             used_depth, level, level_modifiers, roll_treasure, roll_encounter,
             treasure_dc, encounter_dc,
+            forced_location=forced_location, forced_detail=forced_detail,
         )
         depth = used_depth + 1
 
@@ -988,6 +1021,8 @@ def handle_action(
         "roll_treasure": roll_treasure,
         "roll_encounter": roll_encounter,
         "encounter_roll_treasure": encounter_roll_treasure,
+        "forced_location": forced_location,
+        "forced_detail": forced_detail,
     }
 
 
@@ -1005,6 +1040,21 @@ def _render_level_options(level):
     for lvl in range(1, 13):
         selected = "selected" if lvl == level else ""
         parts.append(f'<option value="{lvl}" {selected}>Level {lvl}</option>')
+    return "\n".join(parts)
+
+
+def _render_choice_options(names, current_value):
+    """Builds <option> tags for a "pick one, or leave on Random"
+    dropdown - used by the Location Generator's Location/Detail
+    selects."""
+    parts = [
+        '<option value="" {}>Random</option>'.format(
+            "selected" if not current_value else ""
+        )
+    ]
+    for name in names:
+        selected = "selected" if name == current_value else ""
+        parts.append(f'<option value="{name}" {selected}>{name}</option>')
     return "\n".join(parts)
 
 
@@ -1190,15 +1240,30 @@ def _render_location_view():
     depth = SESSION.get("depth", 0)
     roll_treasure = SESSION.get("roll_treasure", True)
     roll_encounter = SESSION.get("roll_encounter", True)
+    forced_location = SESSION.get("forced_location")
+    forced_detail = SESSION.get("forced_detail")
 
     treasure_checked = "checked" if roll_treasure else ""
     encounter_checked = "checked" if roll_encounter else ""
+
+    location_names = [name for _, name in LOCATIONS]
+    detail_names = [name for _, name in DETAILS]
 
     controls = f"""
     <div class="section">
         <div class="form-row">
             <label for="depth">Depth:</label>
             <input type="number" id="depth" name="depth" value="{depth}">
+        </div>
+        <div class="form-row">
+            <label for="location-select">Location:</label>
+            <select id="location-select">
+                {_render_choice_options(location_names, forced_location)}
+            </select>
+            <label for="detail-select">Detail:</label>
+            <select id="detail-select">
+                {_render_choice_options(detail_names, forced_detail)}
+            </select>
         </div>
         <div class="form-row checkbox-row">
             <label>
@@ -1239,14 +1304,25 @@ def _render_location_view():
         {_render_treasure_check_result(room["treasure_result"])}
         """
 
+    location_label = (
+        f"Location ({room['location_roll']})"
+        if room["location_roll"] is not None
+        else "Location (chosen)"
+    )
+    detail_label = (
+        f"Detail ({room['detail_roll']})"
+        if room["detail_roll"] is not None
+        else "Detail (chosen)"
+    )
+
     return controls + f"""
     <div class="section">
         <div class="meta-line">Depth {room['used_depth']}</div>
 
-        <strong>Location ({room['location_roll']}):</strong> {room['location']}
+        <strong>{location_label}:</strong> {room['location']}
         <div class="description">{render_md(room['location_text'])}</div>
 
-        <strong>Detail ({room['detail_roll']}):</strong> {room['detail']}
+        <strong>{detail_label}:</strong> {room['detail']}
         <div class="description">{render_md(room['detail_text'])}</div>
         {entering_html}
         {treasure_html}

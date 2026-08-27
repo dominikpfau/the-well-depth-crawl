@@ -48,6 +48,16 @@ function getIntFieldArg(id) {
     return Number.isNaN(n) ? null : String(n);
 }
 
+function getSelectField(id) {
+    // Same idea as getDepth()/getCheckbox(): null if the dropdown
+    // isn't currently in the DOM (only the Location view has the
+    // Location/Detail pickers), so other views' actions never
+    // accidentally reset the stored choice. "" (present but set to
+    // "Random") is returned as-is, distinct from null.
+    const el = document.getElementById(id);
+    return el ? el.value : null;
+}
+
 function renderApp() {
     const html = pyGame.render_page();
     document.getElementById("app").innerHTML = html;
@@ -64,7 +74,9 @@ async function runAction(action) {
             getCheckbox("roll-encounter"),
             getCheckbox("encounter-roll-treasure"),
             getIntFieldArg("encounter-dc"),
-            getIntFieldArg("treasure-dc")
+            getIntFieldArg("treasure-dc"),
+            getSelectField("location-select"),
+            getSelectField("detail-select")
         );
         renderApp();
     } catch (err) {
@@ -83,7 +95,9 @@ async function onLevelChange() {
             getCheckbox("roll-encounter"),
             getCheckbox("encounter-roll-treasure"),
             getIntFieldArg("encounter-dc"),
-            getIntFieldArg("treasure-dc")
+            getIntFieldArg("treasure-dc"),
+            getSelectField("location-select"),
+            getSelectField("detail-select")
         );
         renderApp();
     } catch (err) {
@@ -102,7 +116,9 @@ async function switchView(view) {
             getCheckbox("roll-encounter"),
             getCheckbox("encounter-roll-treasure"),
             getIntFieldArg("encounter-dc"),
-            getIntFieldArg("treasure-dc")
+            getIntFieldArg("treasure-dc"),
+            getSelectField("location-select"),
+            getSelectField("detail-select")
         );
         renderApp();
     } catch (err) {
