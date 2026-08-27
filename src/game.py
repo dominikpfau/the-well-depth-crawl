@@ -1632,18 +1632,6 @@ def _render_crawl_entry_full(room, is_fresh=True):
     """
 
 
-def _render_crawl_entry_summary(room):
-    """Compact single-row room marker further down the trail - just
-    enough to identify what was there, no descriptions or
-    encounter/treasure detail."""
-    return f"""
-    <div class="crawl-entry crawl-entry-past">
-        <span class="crawl-room-name">{room['location']} &middot; {room['detail']}</span>
-        <span class="crawl-depth-badge">Depth {room['used_depth']}</span>
-    </div>
-    """
-
-
 def _room_by_id(history, room_id):
     for room in history:
         if room["id"] == room_id:
@@ -1673,6 +1661,127 @@ def _crawl_path_to_current(history, current_id):
         node_id = room["parent_id"]
     path.reverse()
     return path
+
+
+_TREE_CHILD_VISIBLE_LIMIT = 4
+
+
+def _build_children_map(history):
+    """room_id (or None for the root) -> list of that room's direct
+    children, so the tree can be walked top-down from the root(s)."""
+    children = {}
+    for room in history:
+        children.setdefault(room["parent_id"], []).append(room)
+    return children
+
+
+def _render_dtree_node_label(room, is_current, is_on_path):
+    """One room's own box in the tree - shows both Location and
+    Detail (the location name alone often isn't enough to tell rooms
+    apart in a larger dungeon), styled by whether it's where we are
+    now, on the path leading there, or an unrelated branch."""
+    cls = "dtree-node"
+    if is_current:
+        cls += " dtree-node-current"
+    elif is_on_path:
+        cls += " dtree-node-path"
+
+    return (
+        f'<div class="{cls}">{room["location"]}<br>'
+        f'<small>{room["detail"]}</small></div>'
+    )
+
+
+def _render_dtree_item(room, children_map, current_id, path_ids):
+    """
+    One <li> in the tree - its own label first, then its children (if
+    any) as a nested <ul>. This is the exact DOM order the classic
+    downward-growing "pure CSS org chart" pattern expects (see
+    style.css) - the whole thing gets vertically flipped as a single
+    image afterwards (`.dtree-flip`), which is what actually makes
+    deeper rooms end up on top; the underlying structure/geometry
+    stays a completely normal, well-tested top-down tree.
+
+    If there are more children than _TREE_CHILD_VISIBLE_LIMIT, the
+    ones NOT on the path to the currently active room are collapsed
+    behind a "+N more" <details> disclosure - the child that actually
+    leads toward "where we are now" is always kept visible, never
+    hidden by collapsing.
+    """
+    label_html = _render_dtree_node_label(
+        room, room["id"] == current_id, room["id"] in path_ids
+    )
+
+    kids = sorted(children_map.get(room["id"], []), key=lambda r: r["id"])
+    kids_html = ""
+
+    if kids:
+        on_path_kids = [k for k in kids if k["id"] in path_ids]
+        other_kids = [k for k in kids if k["id"] not in path_ids]
+
+        if len(kids) > _TREE_CHILD_VISIBLE_LIMIT:
+            visible = list(on_path_kids)
+            for k in other_kids:
+                if len(visible) >= _TREE_CHILD_VISIBLE_LIMIT:
+                    break
+                visible.append(k)
+            visible_ids = {k["id"] for k in visible}
+            hidden = [k for k in kids if k["id"] not in visible_ids]
+        else:
+            visible, hidden = kids, []
+
+        items_html = "".join(
+            _render_dtree_item(k, children_map, current_id, path_ids) for k in visible
+        )
+
+        if hidden:
+            hidden_html = "".join(
+                _render_dtree_item(k, children_map, current_id, path_ids) for k in hidden
+            )
+            items_html += (
+                '<li class="dtree-item dtree-more">'
+                '<details class="dtree-more-details">'
+                f'<summary class="dtree-more-summary">+{len(hidden)} more</summary>'
+                f'<ul class="dtree-children">{hidden_html}</ul>'
+                '</details>'
+                '</li>'
+            )
+
+        kids_html = f'<ul class="dtree-children">{items_html}</ul>'
+
+    return f'<li class="dtree-item">{label_html}{kids_html}</li>'
+
+
+def _render_dungeon_map(history, current_id):
+    """
+    A real tree diagram of every room ever generated (across every
+    branch) - not just the path to the current one. Renders with the
+    standard, well-tested "pure CSS org chart" nested-list technique
+    (see style.css .dtree-*), then flips the whole thing vertically
+    (`transform: scaleY(-1)`, undone per-node so labels stay readable)
+    so deeper/more recently visited rooms sit at the top instead of
+    the bottom - matching how the current room's own card above it,
+    and everything else in this app, always puts "now" first.
+    """
+    if not history:
+        return ""
+
+    path_ids = {room["id"] for room in _crawl_path_to_current(history, current_id)}
+    children_map = _build_children_map(history)
+    roots = sorted(children_map.get(None, []), key=lambda r: r["id"])
+
+    items_html = "".join(
+        _render_dtree_item(r, children_map, current_id, path_ids) for r in roots
+    )
+
+    return f"""
+    <div class="section">
+        <strong>Dungeon Map</strong>
+        <div class="dtree-wrapper">
+            <ul class="dtree-root dtree-flip">{items_html}</ul>
+        </div>
+    </div>
+    """
 
 
 def _render_crawling_view():
@@ -1706,8 +1815,7 @@ def _render_crawling_view():
     </div>
     """
 
-    path = _crawl_path_to_current(history, current_id)
-    if not path:
+    if not current_room:
         return controls + (
             '<div class="section">'
             "<em>Press 'Go Deeper' to descend into the dungeon.</em>"
@@ -1720,24 +1828,17 @@ def _render_crawling_view():
     # later via "Go Back" naturally makes it non-fresh, and going
     # deeper again from it (a new branch) creates a new room that
     # takes over as the fresh one.
-    is_fresh = path[-1]["id"] == len(history) - 1
+    is_fresh = current_room["id"] == len(history) - 1
 
-    # Current room first, at the top; everything before it on the
-    # active path in reduced form below, each pair joined by a
-    # dashed "corridor" connector segment (see style.css) - scrolls
-    # naturally with the rest of the page.
-    entries = [_render_crawl_entry_full(path[-1], is_fresh=is_fresh)]
-    for room in reversed(path[:-1]):
-        entries.append('<div class="crawl-connector"></div>')
-        entries.append(_render_crawl_entry_summary(room))
-
-    return controls + f"""
+    current_card = f"""
     <div class="section">
         <div class="crawl-history">
-            {''.join(entries)}
+            {_render_crawl_entry_full(current_room, is_fresh=is_fresh)}
         </div>
     </div>
     """
+
+    return controls + current_card + _render_dungeon_map(history, current_id)
 
 
 # ----------------------------

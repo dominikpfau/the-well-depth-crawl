@@ -309,7 +309,7 @@
     }
 
     /* ------------------------
-       Crawling Mode - room history trail
+       Crawling Mode - current room card
        ------------------------ */
     .crawl-history {
         display: flex;
@@ -323,40 +323,149 @@
         padding: 1rem;
     }
 
-    .crawl-connector {
-        align-self: center;
-        width: 3px;
-        height: 22px;
-        margin: 2px 0;
-        background: repeating-linear-gradient(
-            to bottom,
-            #555 0,
-            #555 6px,
-            transparent 6px,
-            transparent 10px
-        );
+    /* ------------------------
+       Crawling Mode - Dungeon Map
+       A real tree diagram (nested <ul>/<li>, connecting lines drawn
+       via ::before/::after), using the classic "pure CSS org chart"
+       technique. The whole thing is rendered upside-down on purpose
+       (deepest rooms first in the DOM = visually on top after the
+       flip) via a vertical flip on the outer wrapper, undone again
+       on each individual node so its text reads normally - this
+       reuses the same well-tested connector geometry a normal
+       top-down tree uses, just mirrored.
+       ------------------------ */
+    .dtree-wrapper {
+        overflow-x: auto;
+        padding: 0.5rem 0 0.25rem;
     }
 
-    .crawl-entry-past {
+    .dtree-flip {
+        transform: scaleY(-1);
+    }
+
+    .dtree-root {
         display: flex;
-        align-items: baseline;
-        justify-content: space-between;
-        gap: 0.75rem;
-        background: #232323;
-        border-radius: 6px;
-        padding: 0.5rem 0.8rem;
-        opacity: 0.7;
-        font-size: 0.85rem;
+        justify-content: center;
+        list-style: none;
+        margin: 0;
+        padding: 0;
     }
 
-    .crawl-room-name {
-        overflow: hidden;
-        text-overflow: ellipsis;
+    .dtree-children {
+        display: flex;
+        justify-content: center;
+        list-style: none;
+        margin: 0;
+        padding-top: 20px;
+        position: relative;
+    }
+
+    .dtree-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        list-style: none;
+        position: relative;
+        padding: 20px 8px 0 8px;
+    }
+
+    .dtree-item::before,
+    .dtree-item::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        right: 50%;
+        border-top: 1px solid #555;
+        width: 50%;
+        height: 20px;
+    }
+
+    .dtree-item::after {
+        right: auto;
+        left: 50%;
+        border-left: 1px solid #555;
+    }
+
+    .dtree-item:only-child {
+        padding-top: 0;
+    }
+
+    .dtree-item:only-child::before,
+    .dtree-item:only-child::after {
+        display: none;
+    }
+
+    .dtree-item:first-child::before,
+    .dtree-item:last-child::after {
+        border: 0 none;
+    }
+
+    .dtree-item:last-child::before {
+        border-right: 1px solid #555;
+        border-radius: 5px 0 0 0;
+    }
+
+    .dtree-item:first-child::after {
+        border-radius: 0 5px 0 0;
+    }
+
+    .dtree-children::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 50%;
+        border-left: 1px solid #555;
+        width: 0;
+        height: 20px;
+    }
+
+    .dtree-node {
+        transform: scaleY(-1);
+        display: inline-block;
+        padding: 0.35rem 0.7rem;
+        border-radius: 6px;
+        background: #2a2a2a;
+        border: 1px solid #444;
+        font-size: 0.8rem;
+        line-height: 1.3;
+        opacity: 0.55;
+        white-space: nowrap;
+        text-align: center;
+    }
+
+    .dtree-node small {
+        display: block;
+        font-size: 0.7rem;
+        opacity: 0.85;
+    }
+
+    .dtree-node-path {
+        opacity: 0.9;
+        border-color: #8a6716;
+    }
+
+    .dtree-node-current {
+        opacity: 1;
+        background: #8a6716;
+        border-color: #c99a2e;
+        color: #fff3d6;
+        font-weight: bold;
+    }
+
+    .dtree-more-summary {
+        transform: scaleY(-1);
+        list-style: none;
+        cursor: pointer;
+        display: inline-block;
+        padding: 0.35rem 0.7rem;
+        border-radius: 6px;
+        background: #232323;
+        border: 1px dashed #555;
+        font-size: 0.8rem;
+        opacity: 0.7;
         white-space: nowrap;
     }
 
-    .crawl-depth-badge {
-        flex-shrink: 0;
-        opacity: 0.8;
-        font-size: 0.75rem;
+    .dtree-more-summary::-webkit-details-marker {
+        display: none;
     }
