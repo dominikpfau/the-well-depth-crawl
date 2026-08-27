@@ -937,6 +937,21 @@ def handle_action(
         crawl_current_id = new_room["id"]
         crawl_depth += 1
 
+    elif action == "go_back":
+        # Moves focus to the room the current one was reached from -
+        # a no-op if there's no history yet or we're already at the
+        # very first room (no parent to go back to). Doesn't touch
+        # crawl_history at all - that room is still there, just no
+        # longer the "current" one. crawl_depth is reset to right
+        # after the parent room, so a subsequent "go_deeper" branches
+        # off from there rather than continuing from however deep the
+        # abandoned path had gotten.
+        current_room = _room_by_id(crawl_history, crawl_current_id)
+        if current_room is not None and current_room["parent_id"] is not None:
+            parent_room = _room_by_id(crawl_history, current_room["parent_id"])
+            crawl_current_id = current_room["parent_id"]
+            crawl_depth = parent_room["used_depth"] + 1
+
     elif action == "check_encounter":
         # A standalone risk check (e.g. searching around, listening at
         # a door, ...) shown in its own Encounter Generator view - not
@@ -1168,6 +1183,20 @@ def _pluralize(count, singular, plural=None):
     return f"{count} {singular if count == 1 else plural}"
 
 
+def _render_quality_summary(treasure):
+    """
+    Just "Quality: X, N items" - no roll/formula info at all. Used
+    when revisiting an older Crawling Mode room via "Go Back": the
+    treasure that's there is still shown, but the dice that produced
+    it (back when the room was first generated) aren't re-litigated
+    every time you look at it again.
+    """
+    count_phrase = _pluralize(treasure["base_item_count"], "item")
+    if treasure["extra_item_count"] > 0:
+        count_phrase += f' + {_pluralize(treasure["extra_item_count"], "extra")}'
+    return f'<strong>Quality:</strong> {treasure["quality"]}, {count_phrase}'
+
+
 def _render_quality_roll_line(treasure):
     """
     Quality tier and item count both fall out of one roll, indexed
@@ -1202,14 +1231,25 @@ def _render_quality_roll_line(treasure):
 
 
 def _render_treasure_check_result(
-    result, fail_message="There doesn't seem to be anything of value here."
+    result, fail_message="There doesn't seem to be anything of value here.",
+    show_roll=True,
 ):
     if result.get("blocked"):
         return "<em>No treasure can be found here.</em>"
 
+    found = result["found_treasure"]
+
+    if not show_roll:
+        if found:
+            return (
+                f'{_render_quality_summary(found)}<br><br>'
+                f'{_render_item_list(found["item_list"])}'
+            )
+        return f"<em>{fail_message}</em>"
+
     badge = (
         '<span class="badge badge-success">Success</span>'
-        if result["found_treasure"]
+        if found
         else '<span class="badge badge-fail">Failure</span>'
     )
 
@@ -1219,7 +1259,6 @@ def _render_treasure_check_result(
         f'vs DC {result["treasure_dc_before"]} {badge}<br><br>'
     )
 
-    found = result["found_treasure"]
     if found:
         html += (
             f'{_render_quality_roll_line(found)}<br><br>'
@@ -1231,12 +1270,20 @@ def _render_treasure_check_result(
     return html
 
 
-def _render_monster_lines(monsters):
+def _render_monster_lines(monsters, show_rolls=True):
     """Renders the "N× Monster (breakdown)" lines for an encounter's
-    monster groups. Assumes `monsters` is not None and has groups."""
+    monster groups. Assumes `monsters` is not None and has groups.
+
+    `show_rolls=False` drops the count-breakdown formula and cascade
+    note, leaving just "N× Monster" - used when revisiting an older
+    Crawling Mode room."""
     requested_level = monsters["requested_level"]
     lines = []
     for group in monsters["groups"]:
+        if not show_rolls:
+            lines.append(f'<span class="recent-roll">{group["count"]}&times; {group["monster"]}</span>')
+            continue
+
         cascade_note = ""
         if group["rolled_on_level"] != requested_level:
             cascade_note = (
@@ -1256,7 +1303,7 @@ def _render_monster_lines(monsters):
     return "<br>".join(lines)
 
 
-def _render_encounter_treasure(result):
+def _render_encounter_treasure(result, show_rolls=True):
     """`result` is a roll_monster_treasure()-shaped dict, or None if
     every monster present is one that never carries treasure."""
     if result is None:
@@ -1268,11 +1315,11 @@ def _render_encounter_treasure(result):
     return f"""
     <hr>
     <strong>Treasure:</strong><br>
-    {_render_treasure_check_result(result)}
+    {_render_treasure_check_result(result, show_roll=show_rolls)}
     """
 
 
-def _render_encounter_result(result, show_treasure=True):
+def _render_encounter_result(result, show_treasure=True, show_rolls=True):
     """
     Renders one encounter-check result - shared between a location's
     own "entering encounter" and the standalone Encounter Generator
@@ -1285,18 +1332,33 @@ def _render_encounter_result(result, show_treasure=True):
     own treasure (see handle_action's "room" branch), so there's
     nothing to explain there, not even a "carries no treasure" note.
 
+    `show_rolls=False` hides all roll/DC mechanics entirely (no
+    "Rolled ... vs DC ..." line, no count-breakdown formula) - used
+    when revisiting an older Crawling Mode room via "Go Back": what's
+    in the room is still shown, but the dice that produced it (back
+    when it was first generated) aren't re-litigated every time.
+
     `result["mode"] == "generated"` (from "generate_encounter") skips
-    the "Rolled ... vs DC ..." framing entirely, since no check
+    the "Rolled ... vs DC ..." framing entirely too, since no check
     actually happened there - mirrors how the Treasure Generator's
     unconditional "Generate Treasure" skips DC framing too.
     """
-    if result.get("mode") == "generated":
-        body = (
-            _render_monster_lines(result["monsters"])
-            if result["monsters"] and result["monsters"]["groups"]
-            else "<em>Nothing generated.</em>"
-        )
-        treasure_html = _render_encounter_treasure(result["treasure"]) if show_treasure else ""
+    if not show_rolls or result.get("mode") == "generated":
+        if result["success"] and result["monsters"] and result["monsters"]["groups"]:
+            body = _render_monster_lines(result["monsters"], show_rolls=show_rolls)
+            treasure_html = (
+                _render_encounter_treasure(result["treasure"], show_rolls=show_rolls)
+                if show_treasure else ""
+            )
+        elif result.get("mode") == "generated":
+            # "generate_encounter" always succeeds and always rolls a
+            # group - this branch shouldn't normally be reachable for
+            # it, but render *something* sensible if it ever is.
+            body = "<em>Nothing generated.</em>"
+            treasure_html = ""
+        else:
+            body = "<em>No encounter.</em>"
+            treasure_html = ""
         return f"{body}\n    {treasure_html}"
 
     badge = (
@@ -1528,15 +1590,21 @@ def _render_treasure_view():
     """
 
 
-def _render_crawl_entry_full(room):
+def _render_crawl_entry_full(room, is_fresh=True):
     """Highlighted card for the room currently at the top of the
-    trail - where the party actually is right now."""
+    trail - where the party actually is right now.
+
+    `is_fresh=False` means this room was revisited via "Go Back"
+    rather than just generated - the room's contents (monsters,
+    treasure) are still shown, but not the rolls that produced them
+    back when it was first entered (see _render_encounter_result() /
+    _render_treasure_check_result()'s `show_rolls`/`show_roll`)."""
     entering_html = ""
     if room.get("entering_encounter"):
         entering_html = f"""
         <hr>
         <strong>Encounter:</strong><br>
-        {_render_encounter_result(room["entering_encounter"], show_treasure=False)}
+        {_render_encounter_result(room["entering_encounter"], show_treasure=False, show_rolls=is_fresh)}
         """
 
     treasure_html = ""
@@ -1544,12 +1612,14 @@ def _render_crawl_entry_full(room):
         treasure_html = f"""
         <hr>
         <strong>Treasure:</strong><br>
-        {_render_treasure_check_result(room["treasure_result"])}
+        {_render_treasure_check_result(room["treasure_result"], show_roll=is_fresh)}
         """
+
+    revisit_note = "" if is_fresh else ' <span class="meta-badge">revisited</span>'
 
     return f"""
     <div class="crawl-entry crawl-entry-current">
-        <div class="meta-line">Depth {room['used_depth']} &middot; You are here</div>
+        <div class="meta-line">Depth {room['used_depth']} &middot; You are here{revisit_note}</div>
 
         <strong>Location ({room['location_roll']}):</strong> {room['location']}
         <div class="description">{render_md(room['location_text'])}</div>
@@ -1572,6 +1642,13 @@ def _render_crawl_entry_summary(room):
         <span class="crawl-depth-badge">Depth {room['used_depth']}</span>
     </div>
     """
+
+
+def _room_by_id(history, room_id):
+    for room in history:
+        if room["id"] == room_id:
+            return room
+    return None
 
 
 def _crawl_path_to_current(history, current_id):
@@ -1603,11 +1680,20 @@ def _render_crawling_view():
     current_id = SESSION.get("crawl_current_id")
     depth = SESSION.get("crawl_depth", 0)
 
+    current_room = _room_by_id(history, current_id)
+    can_go_back = bool(current_room and current_room["parent_id"] is not None)
+    go_back_disabled = "" if can_go_back else "disabled"
+    go_back_title = (
+        "Go back to the previous room"
+        if can_go_back
+        else "No previous room to go back to"
+    )
+
     controls = f"""
     <div class="section">
         <div class="meta-line">Current Depth: {depth}</div>
         <div class="button-row">
-            <button type="button" disabled title="Not implemented yet" onclick="runAction('go_back')">
+            <button type="button" {go_back_disabled} title="{go_back_title}" onclick="runAction('go_back')">
                 Go Back
             </button>
             <button type="button" disabled title="Not implemented yet" onclick="runAction('stay')">
@@ -1628,11 +1714,19 @@ def _render_crawling_view():
             "</div>"
         )
 
+    # A room is "fresh" (just generated, rolls still shown) only if
+    # it's the most recently created room across the whole history -
+    # i.e. nothing has been generated after it yet. Revisiting it
+    # later via "Go Back" naturally makes it non-fresh, and going
+    # deeper again from it (a new branch) creates a new room that
+    # takes over as the fresh one.
+    is_fresh = path[-1]["id"] == len(history) - 1
+
     # Current room first, at the top; everything before it on the
     # active path in reduced form below, each pair joined by a
     # dashed "corridor" connector segment (see style.css) - scrolls
     # naturally with the rest of the page.
-    entries = [_render_crawl_entry_full(path[-1])]
+    entries = [_render_crawl_entry_full(path[-1], is_fresh=is_fresh)]
     for room in reversed(path[:-1]):
         entries.append('<div class="crawl-connector"></div>')
         entries.append(_render_crawl_entry_summary(room))
