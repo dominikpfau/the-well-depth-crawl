@@ -76,7 +76,9 @@ async function runAction(action) {
             getIntFieldArg("encounter-dc"),
             getIntFieldArg("treasure-dc"),
             getSelectField("location-select"),
-            getSelectField("detail-select")
+            getSelectField("detail-select"),
+            getSelectField("monster-select"),
+            getSelectField("quality-select")
         );
         renderApp();
     } catch (err) {
@@ -97,7 +99,9 @@ async function onLevelChange() {
             getIntFieldArg("encounter-dc"),
             getIntFieldArg("treasure-dc"),
             getSelectField("location-select"),
-            getSelectField("detail-select")
+            getSelectField("detail-select"),
+            getSelectField("monster-select"),
+            getSelectField("quality-select")
         );
         renderApp();
     } catch (err) {
@@ -118,7 +122,9 @@ async function switchView(view) {
             getIntFieldArg("encounter-dc"),
             getIntFieldArg("treasure-dc"),
             getSelectField("location-select"),
-            getSelectField("detail-select")
+            getSelectField("detail-select"),
+            getSelectField("monster-select"),
+            getSelectField("quality-select")
         );
         renderApp();
     } catch (err) {

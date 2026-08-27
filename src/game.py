@@ -121,9 +121,22 @@ def collect_modifiers(room: dict | None, trigger: str) -> dict:
     return mods
 
 
-def generate_treasure(quality_mod=0, dungeon_level=1):
-    raw_roll = random.randint(1, 6)
-    quality_roll = max(0, min(12, raw_roll + quality_mod))
+def generate_treasure(quality_mod=0, dungeon_level=1, forced_quality=None):
+    if forced_quality:
+        # A specific quality tier was chosen (Treasure Generator's
+        # dropdown) instead of rolled - still pick uniformly among the
+        # TREASURE_QUALITY_TABLE rolls that map to that tier, so the
+        # item-count variant within it stays a little random, just
+        # like it naturally would if you'd rolled into that tier.
+        matching_rolls = [
+            roll for roll, (_, name) in TREASURE_QUALITY_TABLE.items()
+            if name == forced_quality
+        ]
+        quality_roll = random.choice(matching_rolls)
+        raw_roll = None
+    else:
+        raw_roll = random.randint(1, 6)
+        quality_roll = max(0, min(12, raw_roll + quality_mod))
 
     count, quality = TREASURE_QUALITY_TABLE[quality_roll]
 
@@ -199,7 +212,7 @@ def generate_extra_items(treasure_quality, dungeon_level):
     return items
 
 
-def roll_location_treasure(current_dc: int, mods: dict, dungeon_level=1) -> dict:
+def roll_location_treasure(current_dc: int, mods: dict, dungeon_level=1, forced_quality=None) -> dict:
     if mods["no_treasure"]:
         return {
             "blocked": True,
@@ -218,7 +231,8 @@ def roll_location_treasure(current_dc: int, mods: dict, dungeon_level=1) -> dict
     if roll >= current_dc:
         treasure = generate_treasure(
             quality_mod=mods["treasure_quality"],
-            dungeon_level=dungeon_level
+            dungeon_level=dungeon_level,
+            forced_quality=forced_quality,
         )
 
         return {
@@ -391,7 +405,7 @@ class _RollBudget:
             )
 
 
-def roll_encounter_group(level: int) -> dict:
+def roll_encounter_group(level: int, forced_monster: str = None) -> dict:
     """
     Rolls on the encounter table for `level` - one d6 picks the row
     (1-2 / 3-4 / 5-6), the other picks the column (1-6) - and returns
@@ -402,8 +416,27 @@ def roll_encounter_group(level: int) -> dict:
     entries make it resolve to two (or more, if one of those two also
     happens to be ROLL_TWICE) - see the ENCOUNTER_TABLES comment in
     data.py.
+
+    `forced_monster`, if given (the Encounter Generator's dropdown),
+    skips the table roll entirely and always resolves to exactly that
+    one monster - only its number formula still gets rolled.
     """
     level = max(1, min(12, level))
+
+    if forced_monster:
+        count, breakdown = roll_monster_count_detailed(MONSTERS[forced_monster], level)
+        groups = [{
+            "rolled_on_level": level,
+            "dice": None,
+            "row": None,
+            "column": None,
+            "monster": forced_monster,
+            "multiplier": 1,
+            "count": count,
+            "count_breakdown": breakdown,
+        }]
+        return {"requested_level": level, "groups": groups}
+
     groups = _roll_encounter_groups_at(level, _RollBudget(_MAX_ENCOUNTER_SUBROLLS))
     return {"requested_level": level, "groups": groups}
 
@@ -638,6 +671,8 @@ def _default_session() -> dict:
         "encounter_roll_treasure": True,
         "forced_location": None,
         "forced_detail": None,
+        "forced_monster": None,
+        "forced_quality": None,
     }
 
 
@@ -766,6 +801,8 @@ def handle_action(
     treasure_dc_form=None,
     location_form=None,
     detail_form=None,
+    monster_form=None,
+    quality_form=None,
 ):
     """
     Mirrors the POST branch of the original Flask route.
@@ -801,6 +838,13 @@ def handle_action(
     dropdowns for picking a specific location/detail by name instead
     of rolling for it - empty string (or None, meaning "field not in
     the DOM right now") means "Random", the usual roll.
+
+    `monster_form` is the Encounter Generator's monster dropdown
+    (picks a specific monster instead of rolling the encounter table
+    - only its number formula still gets rolled). `quality_form` is
+    the Treasure Generator's quality dropdown (picks a specific tier
+    instead of rolling into one). Same empty-string-or-None-means-
+    Random convention as the other dropdowns.
     """
     global SESSION
 
@@ -819,6 +863,8 @@ def handle_action(
     encounter_roll_treasure = SESSION.get("encounter_roll_treasure", True)
     forced_location = SESSION.get("forced_location")
     forced_detail = SESSION.get("forced_detail")
+    forced_monster = SESSION.get("forced_monster")
+    forced_quality = SESSION.get("forced_quality")
 
     # read depth/level "from the form", same as the Flask version did
     depth_raw = _to_int_or_none(depth_form)
@@ -840,6 +886,10 @@ def handle_action(
         forced_location = location_form or None
     if detail_form is not None:
         forced_detail = detail_form or None
+    if monster_form is not None:
+        forced_monster = monster_form or None
+    if quality_form is not None:
+        forced_quality = quality_form or None
 
     if roll_treasure_form is not None:
         roll_treasure = bool(roll_treasure_form)
@@ -903,7 +953,7 @@ def handle_action(
         encounter_dc = check["next_dc"]
 
         monsters = (
-            roll_encounter_group(level if level else 1)
+            roll_encounter_group(level if level else 1, forced_monster=forced_monster)
             if check["success"]
             else None
         )
@@ -933,7 +983,7 @@ def handle_action(
         # encounter_dc, since no check actually happened; the
         # monster's own loot (if any) is still a real DC-gated
         # treasure roll though, same as everywhere else.
-        monsters = roll_encounter_group(level if level else 1)
+        monsters = roll_encounter_group(level if level else 1, forced_monster=forced_monster)
         monster_treasure = (
             roll_monster_treasure(monsters, level, level_modifiers, treasure_dc)
             if encounter_roll_treasure
@@ -967,7 +1017,8 @@ def handle_action(
         }
         treasure_dc_before = treasure_dc
         check = roll_location_treasure(
-            treasure_dc, mods, dungeon_level=level if level else 1
+            treasure_dc, mods, dungeon_level=level if level else 1,
+            forced_quality=forced_quality,
         )
         treasure_dc = check["next_dc"]
 
@@ -987,6 +1038,7 @@ def handle_action(
         generated = generate_treasure(
             quality_mod=level_modifiers.get("wealth", 0) if level else 0,
             dungeon_level=room["used_depth"] if room else 1,
+            forced_quality=forced_quality,
         )
         treasure = {
             "mode": "generated",
@@ -1023,6 +1075,8 @@ def handle_action(
         "encounter_roll_treasure": encounter_roll_treasure,
         "forced_location": forced_location,
         "forced_detail": forced_detail,
+        "forced_monster": forced_monster,
+        "forced_quality": forced_quality,
     }
 
 
@@ -1046,7 +1100,8 @@ def _render_level_options(level):
 def _render_choice_options(names, current_value):
     """Builds <option> tags for a "pick one, or leave on Random"
     dropdown - used by the Location Generator's Location/Detail
-    selects."""
+    selects, the Encounter Generator's monster select, and the
+    Treasure Generator's quality select."""
     parts = [
         '<option value="" {}>Random</option>'.format(
             "selected" if not current_value else ""
@@ -1056,6 +1111,40 @@ def _render_choice_options(names, current_value):
         selected = "selected" if name == current_value else ""
         parts.append(f'<option value="{name}" {selected}>{name}</option>')
     return "\n".join(parts)
+
+
+def _monsters_in_level_table(level):
+    """
+    All distinct monster names that can appear on `level`'s encounter
+    table (NEXT_LEVEL / ROLL_TWICE entries excluded), sorted
+    alphabetically - the pool for the Encounter Generator's monster
+    dropdown. Falls back to level 1 if no level is selected, matching
+    how encounter rolling itself defaults elsewhere.
+    """
+    level = max(1, min(12, level or 1))
+    names = set()
+    for row in ENCOUNTER_TABLES[level]:
+        for entry in row:
+            if entry in (NEXT_LEVEL, ROLL_TWICE):
+                continue
+            names.add(entry["monster"])
+    return sorted(names)
+
+
+def _treasure_quality_names():
+    """
+    All distinct treasure quality tiers, in ascending rarity order (as
+    TREASURE_QUALITY_TABLE already lists them) - the pool for the
+    Treasure Generator's quality dropdown.
+    """
+    names = []
+    seen = set()
+    for roll in sorted(TREASURE_QUALITY_TABLE.keys()):
+        name = TREASURE_QUALITY_TABLE[roll][1]
+        if name not in seen:
+            seen.add(name)
+            names.append(name)
+    return names
 
 
 def _render_meta_badges(level_modifiers):
@@ -1092,12 +1181,19 @@ def _render_quality_roll_line(treasure):
     come from separate rolls, so they're called out separately rather
     than folded into one "number of items".
     """
-    rolled = format_roll(treasure["raw_quality_roll"], treasure["quality_mod"])
-
     count_phrase = _pluralize(treasure["base_item_count"], "item")
     if treasure["extra_item_count"] > 0:
         count_phrase += f' + {_pluralize(treasure["extra_item_count"], "extra")}'
 
+    if treasure["raw_quality_roll"] is None:
+        # Quality tier was chosen directly (Treasure Generator's
+        # dropdown), not rolled - nothing to show as "Rolled ...".
+        return (
+            f'<span class="meta-badge">quality chosen '
+            f'\u2192 {treasure["quality"]}, {count_phrase}</span>'
+        )
+
+    rolled = format_roll(treasure["raw_quality_roll"], treasure["quality_mod"])
     return (
         f'Quality roll <span class="recent-roll">{rolled}</span> '
         f'<span class="meta-badge">= {treasure["quality_roll"]} '
@@ -1333,10 +1429,20 @@ def _render_location_view():
 def _render_encounter_view():
     result = SESSION.get("encounter_check")
     roll_treasure = SESSION.get("encounter_roll_treasure", True)
+    level = SESSION.get("level")
+    forced_monster = SESSION.get("forced_monster")
     treasure_checked = "checked" if roll_treasure else ""
+
+    monster_names = _monsters_in_level_table(level)
 
     controls = f"""
     <div class="section">
+        <div class="form-row">
+            <label for="monster-select">Monster:</label>
+            <select id="monster-select">
+                {_render_choice_options(monster_names, forced_monster)}
+            </select>
+        </div>
         <div class="form-row checkbox-row">
             <label>
                 <input type="checkbox" id="encounter-roll-treasure" {treasure_checked}>
@@ -1388,9 +1494,16 @@ def _render_treasure_view_result(result):
 
 def _render_treasure_view():
     treasure = SESSION.get("treasure")
+    forced_quality = SESSION.get("forced_quality")
 
-    controls = """
+    controls = f"""
     <div class="section">
+        <div class="form-row">
+            <label for="quality-select">Quality:</label>
+            <select id="quality-select">
+                {_render_choice_options(_treasure_quality_names(), forced_quality)}
+            </select>
+        </div>
         <button type="button" class="primary-action" onclick="runAction('check_treasure')">
             Roll for Treasure
         </button>
