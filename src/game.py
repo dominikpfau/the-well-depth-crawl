@@ -623,6 +623,9 @@ def _default_session() -> dict:
     return {
         "depth": 0,
         "room": None,
+        "crawl_depth": 0,
+        "crawl_history": [],
+        "crawl_current_id": None,
         "treasure": None,
         "treasure_dc": DEFAULT_TREASURE_DC,
         "encounter_dc": DEFAULT_ENCOUNTER_DC,
@@ -648,6 +651,89 @@ def _to_int_or_none(value):
     if value is None or value == "":
         return None
     return int(value)
+
+
+def _generate_room(used_depth, level, level_modifiers, roll_treasure, roll_encounter, treasure_dc, encounter_dc):
+    """
+    Rolls a fresh location at `used_depth` - optionally its own
+    treasure and an entering encounter, depending on the two flags.
+    Shared by the Location Generator's "room" action (where
+    roll_treasure/roll_encounter come from the person's checkboxes)
+    and Crawling Mode's "go_deeper" (where both are always True - no
+    checkboxes there).
+
+    Returns (room, treasure_dc, encounter_dc) - the room, plus the
+    shared DC pools after whichever rolls happened.
+    """
+    loc_roll, location = roll_table(LOCATIONS, used_depth)
+    det_roll, detail = roll_table(DETAILS, used_depth)
+
+    room = {
+        "used_depth": used_depth,
+        "location_roll": loc_roll,
+        "location": location,
+        "location_text": LOCATION_DESCRIPTIONS.get(location, "No description available."),
+        "detail_roll": det_roll,
+        "detail": detail,
+        "detail_text": DETAIL_DESCRIPTIONS.get(detail, "No description available."),
+        "treasure_result": None,
+        "entering_encounter": None,
+    }
+
+    # --- Roll the treasure hidden in this location, right now. Shown
+    # immediately - there's no separate "search" step for treasure
+    # anymore. Skipped entirely (room["treasure_result"] stays None)
+    # if roll_treasure is False - the Treasure section then just
+    # isn't shown, rather than shown empty.
+    if roll_treasure:
+        treasure_mods = collect_modifiers(room, trigger="ransack")
+        treasure_mods["treasure_roll"] += level_modifiers.get("wealth", 0)
+        treasure_mods["treasure_quality"] += level_modifiers.get("wealth", 0)
+
+        treasure_dc_before = treasure_dc
+        treasure_check = roll_location_treasure(
+            treasure_dc, treasure_mods, dungeon_level=used_depth
+        )
+        treasure_dc = treasure_check["next_dc"]
+
+        room["treasure_result"] = {
+            "treasure_roll": treasure_check["roll"],
+            "raw_roll": treasure_check["raw_roll"],
+            "mod": treasure_check["mod"],
+            "treasure_dc_before": treasure_dc_before,
+            "found_treasure": treasure_check["treasure"],
+            "blocked": treasure_check.get("blocked", False),
+        }
+
+    # --- Random encounter check for entering the location. Skipped
+    # entirely (room["entering_encounter"] stays None) if
+    # roll_encounter is False.
+    if roll_encounter:
+        encounter_mods = collect_modifiers(room, trigger="room")
+        encounter_mods["encounter_roll"] += level_modifiers.get("population", 0)
+
+        encounter_dc_before = encounter_dc
+        entering_check = roll_random_encounter(encounter_dc, encounter_mods)
+        encounter_dc = entering_check["next_dc"]
+
+        monsters = (
+            roll_encounter_group(level if level else 1)
+            if entering_check["success"]
+            else None
+        )
+        # An encounter met while entering a location never carries its
+        # own treasure - only the location itself does (governed by
+        # roll_treasure above, shown in its own section).
+        room["entering_encounter"] = {
+            "raw_roll": entering_check["raw_roll"],
+            "mod": entering_check["mod"],
+            "dc_before": encounter_dc_before,
+            "monsters": monsters,
+            "treasure": None,
+            "success": entering_check["success"],
+        }
+
+    return room, treasure_dc, encounter_dc
 
 
 def handle_action(
@@ -695,6 +781,9 @@ def handle_action(
 
     depth = SESSION.get("depth", 0)
     room = SESSION.get("room")
+    crawl_depth = SESSION.get("crawl_depth", 0)
+    crawl_history = list(SESSION.get("crawl_history", []))
+    crawl_current_id = SESSION.get("crawl_current_id")
     treasure = SESSION.get("treasure")
     treasure_dc = SESSION.get("treasure_dc", DEFAULT_TREASURE_DC)
     encounter_dc = SESSION.get("encounter_dc", DEFAULT_ENCOUNTER_DC)
@@ -729,81 +818,41 @@ def handle_action(
 
     if action == "room":
         used_depth = depth
-        loc_roll, location = roll_table(LOCATIONS, used_depth)
-        det_roll, detail = roll_table(DETAILS, used_depth)
-
-        room = {
-            "used_depth": used_depth,
-            "location_roll": loc_roll,
-            "location": location,
-            "location_text": LOCATION_DESCRIPTIONS.get(location, "No description available."),
-            "detail_roll": det_roll,
-            "detail": detail,
-            "detail_text": DETAIL_DESCRIPTIONS.get(detail, "No description available."),
-            "treasure_result": None,
-            "entering_encounter": None,
-        }
-
-        # --- Roll the treasure hidden in this location, right now.
-        # Shown immediately - there's no separate "search" step for
-        # treasure anymore. Skipped entirely (room["treasure_result"]
-        # stays None) if the "Roll for Treasure" checkbox is off - the
-        # Treasure section then just isn't shown, rather than shown
-        # empty.
-        if roll_treasure:
-            treasure_mods = collect_modifiers(room, trigger="ransack")
-            treasure_mods["treasure_roll"] += level_modifiers.get("wealth", 0)
-            treasure_mods["treasure_quality"] += level_modifiers.get("wealth", 0)
-
-            treasure_dc_before = treasure_dc
-            treasure_check = roll_location_treasure(
-                treasure_dc, treasure_mods, dungeon_level=used_depth
-            )
-            treasure_dc = treasure_check["next_dc"]
-
-            room["treasure_result"] = {
-                "treasure_roll": treasure_check["roll"],
-                "raw_roll": treasure_check["raw_roll"],
-                "mod": treasure_check["mod"],
-                "treasure_dc_before": treasure_dc_before,
-                "found_treasure": treasure_check["treasure"],
-                "blocked": treasure_check.get("blocked", False),
-            }
-
-        # --- Random encounter check for entering the location. This
-        # belongs to the location itself (shown inside the Location
-        # Generator view), separate from the standalone "Check for
-        # Encounter" result in the Encounter Generator view - they no
-        # longer share a slot, so using one doesn't overwrite the
-        # other. Skipped entirely (room["entering_encounter"] stays
-        # None) if "Roll for Encounter" is off.
-        if roll_encounter:
-            encounter_mods = collect_modifiers(room, trigger="room")
-            encounter_mods["encounter_roll"] += level_modifiers.get("population", 0)
-
-            encounter_dc_before = encounter_dc
-            entering_check = roll_random_encounter(encounter_dc, encounter_mods)
-            encounter_dc = entering_check["next_dc"]
-
-            monsters = (
-                roll_encounter_group(level if level else 1)
-                if entering_check["success"]
-                else None
-            )
-            # Unlike the standalone Encounter Generator, an encounter
-            # met while entering a location never carries its own
-            # treasure - only the location itself does (governed by
-            # "Roll for Treasure" above, shown in its own section).
-            room["entering_encounter"] = {
-                "raw_roll": entering_check["raw_roll"],
-                "mod": entering_check["mod"],
-                "dc_before": encounter_dc_before,
-                "monsters": monsters,
-                "treasure": None,
-                "success": entering_check["success"],
-            }
-
+        room, treasure_dc, encounter_dc = _generate_room(
+            used_depth, level, level_modifiers, roll_treasure, roll_encounter,
+            treasure_dc, encounter_dc,
+        )
         depth = used_depth + 1
+
+    elif action == "go_deeper":
+        # Crawling Mode: always rolls both treasure and an entering
+        # encounter (no checkboxes here) and always advances its own,
+        # separate depth counter - never user-editable, unlike the
+        # Location Generator's depth field.
+        #
+        # Every room gets an "id" and a "parent_id" (the room it was
+        # reached from - None for the very first one) instead of just
+        # relying on its position in crawl_history. Right now, with
+        # only "go_deeper" implemented, parent_id always points at
+        # whatever was current, so this can only ever produce a single
+        # straight line - but once "Go Back" exists and lets someone
+        # go_deeper again from an *earlier* room, the same linking
+        # scheme naturally produces a second branch from that room,
+        # with no changes needed to how rooms are stored. crawl_history
+        # itself stays a flat, append-only list of every room ever
+        # generated (across all branches) - crawl_current_id marks
+        # which one is "where we are now", and _crawl_path_to_current()
+        # walks parent_id links to reconstruct the active path through
+        # it for display.
+        new_room, treasure_dc, encounter_dc = _generate_room(
+            crawl_depth, level, level_modifiers, True, True,
+            treasure_dc, encounter_dc,
+        )
+        new_room["id"] = len(crawl_history)
+        new_room["parent_id"] = crawl_current_id
+        crawl_history.append(new_room)
+        crawl_current_id = new_room["id"]
+        crawl_depth += 1
 
     elif action == "check_encounter":
         # A standalone risk check (e.g. searching around, listening at
@@ -916,7 +965,7 @@ def handle_action(
         }
 
     elif action == "switch_view":
-        if view_form in ("location", "encounter", "treasure"):
+        if view_form in ("location", "encounter", "treasure", "crawling"):
             active_view = view_form
 
     elif action == "reset":
@@ -926,6 +975,9 @@ def handle_action(
     SESSION = {
         "depth": depth,
         "room": room,
+        "crawl_depth": crawl_depth,
+        "crawl_history": crawl_history,
+        "crawl_current_id": crawl_current_id,
         "treasure": treasure,
         "treasure_dc": treasure_dc,
         "encounter_dc": encounter_dc,
@@ -1287,6 +1339,124 @@ def _render_treasure_view():
     """
 
 
+def _render_crawl_entry_full(room):
+    """Highlighted card for the room currently at the top of the
+    trail - where the party actually is right now."""
+    entering_html = ""
+    if room.get("entering_encounter"):
+        entering_html = f"""
+        <hr>
+        <strong>Encounter:</strong><br>
+        {_render_encounter_result(room["entering_encounter"], show_treasure=False)}
+        """
+
+    treasure_html = ""
+    if room.get("treasure_result"):
+        treasure_html = f"""
+        <hr>
+        <strong>Treasure:</strong><br>
+        {_render_treasure_check_result(room["treasure_result"])}
+        """
+
+    return f"""
+    <div class="crawl-entry crawl-entry-current">
+        <div class="meta-line">Depth {room['used_depth']} &middot; You are here</div>
+
+        <strong>Location ({room['location_roll']}):</strong> {room['location']}
+        <div class="description">{render_md(room['location_text'])}</div>
+
+        <strong>Detail ({room['detail_roll']}):</strong> {room['detail']}
+        <div class="description">{render_md(room['detail_text'])}</div>
+        {entering_html}
+        {treasure_html}
+    </div>
+    """
+
+
+def _render_crawl_entry_summary(room):
+    """Compact single-row room marker further down the trail - just
+    enough to identify what was there, no descriptions or
+    encounter/treasure detail."""
+    return f"""
+    <div class="crawl-entry crawl-entry-past">
+        <span class="crawl-room-name">{room['location']} &middot; {room['detail']}</span>
+        <span class="crawl-depth-badge">Depth {room['used_depth']}</span>
+    </div>
+    """
+
+
+def _crawl_path_to_current(history, current_id):
+    """
+    Walks parent_id links from `current_id` back to the root, returning
+    the path in root-to-current order (oldest first). This is the
+    actual currently-active path through the room "tree" - once
+    branching exists (a future "Go Back" followed by "go_deeper" from
+    an earlier room), this is what tells apart "the path leading to
+    where we are now" from "every room ever generated across every
+    branch" (crawl_history, which just keeps growing and is no longer
+    usable as a single ordered trail on its own).
+    """
+    if current_id is None:
+        return []
+    by_id = {room["id"]: room for room in history}
+    path = []
+    node_id = current_id
+    while node_id is not None:
+        room = by_id[node_id]
+        path.append(room)
+        node_id = room["parent_id"]
+    path.reverse()
+    return path
+
+
+def _render_crawling_view():
+    history = SESSION.get("crawl_history", [])
+    current_id = SESSION.get("crawl_current_id")
+    depth = SESSION.get("crawl_depth", 0)
+
+    controls = f"""
+    <div class="section">
+        <div class="meta-line">Current Depth: {depth}</div>
+        <div class="button-row">
+            <button type="button" disabled title="Not implemented yet" onclick="runAction('go_back')">
+                Go Back
+            </button>
+            <button type="button" disabled title="Not implemented yet" onclick="runAction('stay')">
+                Stay
+            </button>
+            <button type="button" class="primary-action" onclick="runAction('go_deeper')">
+                Go Deeper
+            </button>
+        </div>
+    </div>
+    """
+
+    path = _crawl_path_to_current(history, current_id)
+    if not path:
+        return controls + (
+            '<div class="section">'
+            "<em>Press 'Go Deeper' to descend into the dungeon.</em>"
+            "</div>"
+        )
+
+    # Current room first, at the top; everything before it on the
+    # active path in reduced form below, each pair joined by a
+    # dashed "corridor" connector segment (see style.css) - scrolls
+    # naturally with the rest of the page.
+    entries = [_render_crawl_entry_full(path[-1])]
+    for room in reversed(path[:-1]):
+        entries.append('<div class="crawl-connector"></div>')
+        entries.append(_render_crawl_entry_summary(room))
+
+    return controls + f"""
+    <div class="section">
+        <div class="crawl-history">
+            {''.join(entries)}
+        </div>
+    </div>
+    """
+
+
 # ----------------------------
 # HEADER / SIDEBAR NAVIGATION
 # ----------------------------
@@ -1295,6 +1465,7 @@ _VIEWS = [
     ("location", "Location Generator"),
     ("encounter", "Encounter Generator"),
     ("treasure", "Treasure Generator"),
+    ("crawling", "Crawling Mode"),
 ]
 
 
@@ -1313,12 +1484,14 @@ def _render_header():
         <select name="level" id="level" onchange="onLevelChange()">
             {_render_level_options(level)}
         </select>
+    </div>
+    <div class="meta-line">Modifiers: {modifiers_text}</div>
+    <div class="header-row">
         <label for="encounter-dc">Encounter DC:</label>
         <input type="number" id="encounter-dc" name="encounter-dc" value="{encounter_dc}">
         <label for="treasure-dc">Treasure DC:</label>
         <input type="number" id="treasure-dc" name="treasure-dc" value="{treasure_dc}">
     </div>
-    <div class="meta-line">Modifiers: {modifiers_text}</div>
     """
 
 
@@ -1344,6 +1517,7 @@ _VIEW_RENDERERS = {
     "location": _render_location_view,
     "encounter": _render_encounter_view,
     "treasure": _render_treasure_view,
+    "crawling": _render_crawling_view,
 }
 
 

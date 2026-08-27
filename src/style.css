@@ -307,3 +307,56 @@
     .sidebar-backdrop.visible {
         display: block;
     }
+
+    /* ------------------------
+       Crawling Mode - room history trail
+       ------------------------ */
+    .crawl-history {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .crawl-entry-current {
+        background: #2a2a2a;
+        border: 2px solid #c99a2e;
+        border-radius: 8px;
+        padding: 1rem;
+    }
+
+    .crawl-connector {
+        align-self: center;
+        width: 3px;
+        height: 22px;
+        margin: 2px 0;
+        background: repeating-linear-gradient(
+            to bottom,
+            #555 0,
+            #555 6px,
+            transparent 6px,
+            transparent 10px
+        );
+    }
+
+    .crawl-entry-past {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.75rem;
+        background: #232323;
+        border-radius: 6px;
+        padding: 0.5rem 0.8rem;
+        opacity: 0.7;
+        font-size: 0.85rem;
+    }
+
+    .crawl-room-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .crawl-depth-badge {
+        flex-shrink: 0;
+        opacity: 0.8;
+        font-size: 0.75rem;
+    }
