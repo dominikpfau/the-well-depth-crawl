@@ -46,6 +46,24 @@
         font-weight: bold;
     }
 
+    /* ------------------------
+       Room Card (Location Generator + Crawling Mode's current room)
+       Location/Detail names are the headline - the two most
+       important facts about a room - deliberately more prominent
+       than the roll info that produced them (which lives in the
+       .meta-line/.meta-badge right below instead).
+       ------------------------ */
+    .room-title {
+        font-size: 1.25rem;
+        font-weight: bold;
+        margin-bottom: 0.3rem;
+    }
+
+    .room-title-sep {
+        opacity: 0.5;
+        font-weight: normal;
+    }
+
     .description {
         margin-left: 1.5rem;
         margin-top: 0.5rem;

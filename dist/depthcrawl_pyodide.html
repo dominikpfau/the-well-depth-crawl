@@ -52,6 +52,24 @@
         font-weight: bold;
     }
 
+    /* ------------------------
+       Room Card (Location Generator + Crawling Mode's current room)
+       Location/Detail names are the headline - the two most
+       important facts about a room - deliberately more prominent
+       than the roll info that produced them (which lives in the
+       .meta-line/.meta-badge right below instead).
+       ------------------------ */
+    .room-title {
+        font-size: 1.25rem;
+        font-weight: bold;
+        margin-bottom: 0.3rem;
+    }
+
+    .room-title-sep {
+        opacity: 0.5;
+        font-weight: normal;
+    }
+
     .description {
         margin-left: 1.5rem;
         margin-top: 0.5rem;
@@ -3099,6 +3117,88 @@ def _render_encounter_result(result, show_treasure=True, show_rolls=True):
 # only one of these is shown at a time (see render_page()).
 # ----------------------------
 
+def _render_room_roll_badge(label, roll, depth, show_rolls):
+    """
+    One small "how this was determined" badge for a room's Location
+    or Detail. Value-first design: the actual name is the headline
+    (see _render_room_card below), this is just the subtle footnote
+    explaining the roll behind it - the same "quality roll X = Y ->
+    tier" idea used for treasure (_render_quality_roll_line), instead
+    of a bare number sitting in front of the name with no context.
+
+    `roll` is the room's stored location_roll/detail_roll - the
+    *total* (d20 + depth) roll_table() actually rolled against the
+    table, or None if that field was chosen from a dropdown instead
+    (see _generate_room's forced_location/forced_detail). The raw d20
+    itself isn't stored separately, but depth is known, so it's
+    simply `roll - depth`.
+
+    Blank entirely when `show_rolls` is False (Crawling Mode
+    revisiting an older room via "Go Back").
+    """
+    if not show_rolls:
+        return ""
+    if roll is None:
+        return f'<span class="meta-badge">{label} chosen</span>'
+    raw = roll - depth
+    return f'<span class="meta-badge">{label} rolled {format_roll(raw, depth)} = {roll}</span>'
+
+
+def _render_room_card(room, show_rolls=True, status_note=""):
+    """
+    Renders a room's Location/Detail title, how it was determined,
+    both descriptions, and (if present) its Encounter/Treasure
+    sections - shared by the Location Generator and Crawling Mode's
+    current-room card, so both stay visually consistent and any
+    future tweak to how a room is presented only needs to happen once.
+
+    Location + Detail are the headline - the two most important facts
+    about a room, and the first thing meant to catch the eye - with
+    the roll (or "chosen" note) that produced them demoted to a small
+    meta-badge underneath, rather than a bare roll number sitting in
+    front of the name itself.
+
+    `status_note`, if given (Crawling Mode's "You are here" / "You
+    are here (revisited)"), is folded into the same meta-line as the
+    depth and roll badges, rather than a separate line above it.
+    """
+    loc_badge = _render_room_roll_badge("Location", room["location_roll"], room["used_depth"], show_rolls)
+    det_badge = _render_room_roll_badge("Detail", room["detail_roll"], room["used_depth"], show_rolls)
+
+    meta_line = f"Depth {room['used_depth']}"
+    if status_note:
+        meta_line += f" &middot; {status_note}"
+    for badge in (loc_badge, det_badge):
+        if badge:
+            meta_line += f" {badge}"
+
+    entering_html = ""
+    if room.get("entering_encounter"):
+        entering_html = f"""
+        <hr>
+        <strong>Encounter:</strong><br>
+        {_render_encounter_result(room["entering_encounter"], show_treasure=False, show_rolls=show_rolls)}
+        """
+
+    treasure_html = ""
+    if room.get("treasure_result"):
+        treasure_html = f"""
+        <hr>
+        <strong>Treasure:</strong><br>
+        {_render_treasure_check_result(room["treasure_result"], show_roll=show_rolls)}
+        """
+
+    return f"""
+    <div class="room-title">{room['location']} <span class="room-title-sep">&middot;</span> {room['detail']}</div>
+    <div class="meta-line">{meta_line}</div>
+
+    <div class="description">{render_md(room['location_text'])}</div>
+    <div class="description">{render_md(room['detail_text'])}</div>
+    {entering_html}
+    {treasure_html}
+    """
+
+
 def _render_location_view():
     room = SESSION.get("room")
     depth = SESSION.get("depth", 0)
@@ -3152,44 +3252,9 @@ def _render_location_view():
             "</div>"
         )
 
-    entering_html = ""
-    if room.get("entering_encounter"):
-        entering_html = f"""
-        <hr>
-        <strong>Encounter:</strong><br>
-        {_render_encounter_result(room["entering_encounter"], show_treasure=False)}
-        """
-
-    treasure_html = ""
-    if room.get("treasure_result"):
-        treasure_html = f"""
-        <hr>
-        <strong>Treasure:</strong><br>
-        {_render_treasure_check_result(room["treasure_result"])}
-        """
-
-    location_label = (
-        f"Location ({room['location_roll']})"
-        if room["location_roll"] is not None
-        else "Location (chosen)"
-    )
-    detail_label = (
-        f"Detail ({room['detail_roll']})"
-        if room["detail_roll"] is not None
-        else "Detail (chosen)"
-    )
-
     return controls + f"""
     <div class="section">
-        <div class="meta-line">Depth {room['used_depth']}</div>
-
-        <strong>{location_label}:</strong> {room['location']}
-        <div class="description">{render_md(room['location_text'])}</div>
-
-        <strong>{detail_label}:</strong> {room['detail']}
-        <div class="description">{render_md(room['detail_text'])}</div>
-        {entering_html}
-        {treasure_html}
+        {_render_room_card(room, show_rolls=True)}
     </div>
     """
 
@@ -3302,38 +3367,14 @@ def _render_crawl_entry_full(room, is_fresh=True):
 
     `is_fresh=False` means this room was revisited via "Go Back"
     rather than just generated - the room's contents (monsters,
-    treasure) are still shown, but not the rolls that produced them
-    back when it was first entered (see _render_encounter_result() /
-    _render_treasure_check_result()'s `show_rolls`/`show_roll`)."""
-    entering_html = ""
-    if room.get("entering_encounter"):
-        entering_html = f"""
-        <hr>
-        <strong>Encounter:</strong><br>
-        {_render_encounter_result(room["entering_encounter"], show_treasure=False, show_rolls=is_fresh)}
-        """
-
-    treasure_html = ""
-    if room.get("treasure_result"):
-        treasure_html = f"""
-        <hr>
-        <strong>Treasure:</strong><br>
-        {_render_treasure_check_result(room["treasure_result"], show_roll=is_fresh)}
-        """
-
-    revisit_note = "" if is_fresh else ' <span class="meta-badge">revisited</span>'
+    treasure, and now also which Location/Detail it is) are still
+    shown, but not any of the rolls that produced them back when it
+    was first entered (see _render_room_card's `show_rolls`)."""
+    status_note = "You are here" + ("" if is_fresh else " (revisited)")
 
     return f"""
     <div class="crawl-entry crawl-entry-current">
-        <div class="meta-line">Depth {room['used_depth']} &middot; You are here{revisit_note}</div>
-
-        <strong>Location ({room['location_roll']}):</strong> {room['location']}
-        <div class="description">{render_md(room['location_text'])}</div>
-
-        <strong>Detail ({room['detail_roll']}):</strong> {room['detail']}
-        <div class="description">{render_md(room['detail_text'])}</div>
-        {entering_html}
-        {treasure_html}
+        {_render_room_card(room, show_rolls=is_fresh, status_note=status_note)}
     </div>
     """
 
