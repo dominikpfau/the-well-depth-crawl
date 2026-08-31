@@ -665,7 +665,7 @@ def _default_session() -> dict:
         "encounter_check": None,
         "level": None,
         "level_modifiers": {},
-        "active_view": "location",
+        "active_view": "crawling",
         "roll_treasure": True,
         "roll_encounter": True,
         "encounter_roll_treasure": True,
@@ -857,7 +857,7 @@ def handle_action(
     treasure_dc = SESSION.get("treasure_dc", DEFAULT_TREASURE_DC)
     encounter_dc = SESSION.get("encounter_dc", DEFAULT_ENCOUNTER_DC)
     encounter_check = SESSION.get("encounter_check")
-    active_view = SESSION.get("active_view", "location")
+    active_view = SESSION.get("active_view", "crawling")
     roll_treasure = SESSION.get("roll_treasure", True)
     roll_encounter = SESSION.get("roll_encounter", True)
     encounter_roll_treasure = SESSION.get("encounter_roll_treasure", True)
@@ -1663,9 +1663,6 @@ def _crawl_path_to_current(history, current_id):
     return path
 
 
-_TREE_CHILD_VISIBLE_LIMIT = 4
-
-
 def _build_children_map(history):
     """room_id (or None for the root) -> list of that room's direct
     children, so the tree can be walked top-down from the root(s)."""
@@ -1675,45 +1672,27 @@ def _build_children_map(history):
     return children
 
 
-def _render_dtree_node_label(room, is_current, is_on_path):
-    """One room's own box in the tree - shows both Location and
-    Detail (the location name alone often isn't enough to tell rooms
-    apart in a larger dungeon), styled by whether it's where we are
-    now, on the path leading there, or an unrelated branch."""
-    cls = "dtree-node"
-    if is_current:
-        cls += " dtree-node-current"
-    elif is_on_path:
-        cls += " dtree-node-path"
-
-    return (
-        f'<div class="{cls}">{room["location"]}<br>'
-        f'<small>{room["detail"]}</small></div>'
-    )
+_TREE_CHILD_VISIBLE_LIMIT = 4
+_TREE_COL_WIDTH = 150
+_TREE_ROW_HEIGHT = 64
+_TREE_NODE_WIDTH = 132
+_TREE_NODE_HEIGHT = 40
 
 
-def _render_dtree_item(room, children_map, current_id, path_ids):
+def _build_visible_tree(room, children_map, path_ids):
     """
-    One <li> in the tree - its own label first, then its children (if
-    any) as a nested <ul>. This is the exact DOM order the classic
-    downward-growing "pure CSS org chart" pattern expects (see
-    style.css) - the whole thing gets vertically flipped as a single
-    image afterwards (`.dtree-flip`), which is what actually makes
-    deeper rooms end up on top; the underlying structure/geometry
-    stays a completely normal, well-tested top-down tree.
-
-    If there are more children than _TREE_CHILD_VISIBLE_LIMIT, the
-    ones NOT on the path to the currently active room are collapsed
-    behind a "+N more" <details> disclosure - the child that actually
-    leads toward "where we are now" is always kept visible, never
-    hidden by collapsing.
+    Builds a plain nested dict {"room", "is_more", "hidden_count",
+    "children"} for `room` and its descendants - deciding, up front,
+    which children are actually shown. If a room has more than
+    _TREE_CHILD_VISIBLE_LIMIT children, the ones NOT on the path to
+    the currently active room are collapsed into a single synthetic
+    "+N more" leaf (the child that actually leads toward "where we
+    are now" is always kept visible, never hidden). Keeping this
+    decision separate from the layout math below means the layout
+    only ever has to deal with what's actually going to be drawn.
     """
-    label_html = _render_dtree_node_label(
-        room, room["id"] == current_id, room["id"] in path_ids
-    )
-
     kids = sorted(children_map.get(room["id"], []), key=lambda r: r["id"])
-    kids_html = ""
+    node = {"room": room, "is_more": False, "hidden_count": 0, "children": []}
 
     if kids:
         on_path_kids = [k for k in kids if k["id"] in path_ids]
@@ -1730,38 +1709,66 @@ def _render_dtree_item(room, children_map, current_id, path_ids):
         else:
             visible, hidden = kids, []
 
-        items_html = "".join(
-            _render_dtree_item(k, children_map, current_id, path_ids) for k in visible
-        )
+        for k in visible:
+            node["children"].append(_build_visible_tree(k, children_map, path_ids))
 
         if hidden:
-            hidden_html = "".join(
-                _render_dtree_item(k, children_map, current_id, path_ids) for k in hidden
-            )
-            items_html += (
-                '<li class="dtree-item dtree-more">'
-                '<details class="dtree-more-details">'
-                f'<summary class="dtree-more-summary">+{len(hidden)} more</summary>'
-                f'<ul class="dtree-children">{hidden_html}</ul>'
-                '</details>'
-                '</li>'
-            )
+            node["children"].append({
+                "room": None, "is_more": True,
+                "hidden_count": len(hidden), "children": [],
+            })
 
-        kids_html = f'<ul class="dtree-children">{items_html}</ul>'
+    return node
 
-    return f'<li class="dtree-item">{label_html}{kids_html}</li>'
+
+def _compute_tree_x(node, slot_counter, x_cache):
+    """
+    Post-order: assigns every leaf the next free integer "column slot"
+    (0, 1, 2, ...), and every internal node the *average* of its
+    children's slots - the standard, simple tree-layout algorithm.
+    Stores every node's x in `x_cache` (keyed by the node dict's
+    identity) and returns it. This is plain arithmetic on integers -
+    nothing here depends on how wide any room's name happens to
+    render, unlike centering a browser flexbox would.
+    """
+    if not node["children"]:
+        x = float(slot_counter[0])
+        slot_counter[0] += 1
+    else:
+        xs = [_compute_tree_x(c, slot_counter, x_cache) for c in node["children"]]
+        x = sum(xs) / len(xs)
+    x_cache[id(node)] = x
+    return x
+
+
+def _flatten_tree(node, depth, x_cache, parent_entry, out):
+    """Pre-order walk producing one flat entry per visible node, each
+    carrying its own (x, depth) and a reference to its parent's
+    entry (or None for the root) - everything _render_dungeon_map
+    needs to place a box and draw one line up to its parent."""
+    entry = {"node": node, "x": x_cache[id(node)], "depth": depth, "parent": parent_entry}
+    out.append(entry)
+    for child in node["children"]:
+        _flatten_tree(child, depth + 1, x_cache, entry, out)
+    return out
 
 
 def _render_dungeon_map(history, current_id):
     """
-    A real tree diagram of every room ever generated (across every
-    branch) - not just the path to the current one. Renders with the
-    standard, well-tested "pure CSS org chart" nested-list technique
-    (see style.css .dtree-*), then flips the whole thing vertically
-    (`transform: scaleY(-1)`, undone per-node so labels stay readable)
-    so deeper/more recently visited rooms sit at the top instead of
-    the bottom - matching how the current room's own card above it,
-    and everything else in this app, always puts "now" first.
+    A tree diagram of every room ever generated (across every branch)
+    - not just the path to the current one. The room we're at now is
+    highlighted; everything on the path leading to it is subtly
+    marked too, so the route taken is visible at a glance among
+    unrelated branches.
+
+    Unlike an earlier version of this, every box's position is a
+    plain (column, row) pair computed in Python (_compute_tree_x /
+    _flatten_tree) and placed with an explicit pixel offset - deeper
+    rooms get a smaller pixel "row" so they end up higher on the
+    page. Connecting lines are drawn between those exact, known
+    coordinates via an SVG overlay. None of this depends on a
+    browser auto-centering nested boxes of differing width, which is
+    what caused rooms to drift sideways in an earlier version.
     """
     if not history:
         return ""
@@ -1769,16 +1776,91 @@ def _render_dungeon_map(history, current_id):
     path_ids = {room["id"] for room in _crawl_path_to_current(history, current_id)}
     children_map = _build_children_map(history)
     roots = sorted(children_map.get(None, []), key=lambda r: r["id"])
+    if not roots:
+        return ""
 
-    items_html = "".join(
-        _render_dtree_item(r, children_map, current_id, path_ids) for r in roots
-    )
+    tree = _build_visible_tree(roots[0], children_map, path_ids)
+
+    slot_counter = [0]
+    x_cache = {}
+    _compute_tree_x(tree, slot_counter, x_cache)
+
+    flat = _flatten_tree(tree, 0, x_cache, None, [])
+
+    max_x = max(e["x"] for e in flat)
+    max_depth = max(e["depth"] for e in flat)
+
+    canvas_width = (max_x + 1) * _TREE_COL_WIDTH
+    canvas_height = (max_depth + 1) * _TREE_ROW_HEIGHT
+
+    def center(entry):
+        cx = entry["x"] * _TREE_COL_WIDTH + _TREE_COL_WIDTH / 2
+        # deepest room (depth == max_depth) gets the smallest cy, so
+        # it ends up at the top of the canvas.
+        cy = (max_depth - entry["depth"]) * _TREE_ROW_HEIGHT + _TREE_ROW_HEIGHT / 2
+        return cx, cy
+
+    lines = []
+    for entry in flat:
+        if entry["parent"] is None:
+            continue
+        cx1, cy1 = center(entry)
+        cx2, cy2 = center(entry["parent"])
+        # Elbow connector: straight down from the child, a horizontal
+        # jog to line up with the parent's column, then straight down
+        # into the parent - classic org-chart style, and it stays
+        # readable even when child/parent sit in very different
+        # columns, unlike a single diagonal line would.
+        y_child_bottom = cy1 + _TREE_NODE_HEIGHT / 2
+        y_parent_top = cy2 - _TREE_NODE_HEIGHT / 2
+        mid_y = (y_child_bottom + y_parent_top) / 2
+        lines.append(
+            f'<path d="M {cx1:.1f} {y_child_bottom:.1f} '
+            f'V {mid_y:.1f} H {cx2:.1f} V {y_parent_top:.1f}" '
+            f'fill="none" stroke="#555" stroke-width="2" />'
+        )
+
+    boxes = []
+    for entry in flat:
+        cx, cy = center(entry)
+        left = cx - _TREE_NODE_WIDTH / 2
+        top = cy - _TREE_NODE_HEIGHT / 2
+        node = entry["node"]
+        box_style = (
+            f"left:{left:.1f}px; top:{top:.1f}px; "
+            f"width:{_TREE_NODE_WIDTH}px; min-height:{_TREE_NODE_HEIGHT}px;"
+        )
+
+        if node["is_more"]:
+            boxes.append(
+                f'<div class="dtree-node dtree-node-more" style="{box_style}">'
+                f'+{node["hidden_count"]} more</div>'
+            )
+            continue
+
+        room = node["room"]
+        cls = "dtree-node"
+        if room["id"] == current_id:
+            cls += " dtree-node-current"
+        elif room["id"] in path_ids:
+            cls += " dtree-node-path"
+
+        boxes.append(
+            f'<div class="{cls}" style="{box_style}">'
+            f'{room["location"]}<br><small>{room["detail"]}</small></div>'
+        )
 
     return f"""
     <div class="section">
         <strong>Dungeon Map</strong>
         <div class="dtree-wrapper">
-            <ul class="dtree-root dtree-flip">{items_html}</ul>
+            <div class="dtree-canvas" style="width:{canvas_width:.0f}px; height:{canvas_height:.0f}px;">
+                <svg class="dtree-lines" viewBox="0 0 {canvas_width:.0f} {canvas_height:.0f}"
+                     width="{canvas_width:.0f}" height="{canvas_height:.0f}">
+                    {''.join(lines)}
+                </svg>
+                {''.join(boxes)}
+            </div>
         </div>
     </div>
     """
@@ -1846,10 +1928,10 @@ def _render_crawling_view():
 # ----------------------------
 
 _VIEWS = [
+    ("crawling", "Crawling Mode"),
     ("location", "Location Generator"),
     ("encounter", "Encounter Generator"),
     ("treasure", "Treasure Generator"),
-    ("crawling", "Crawling Mode"),
 ]
 
 
@@ -1880,7 +1962,7 @@ def _render_header():
 
 
 def _render_sidebar():
-    active_view = SESSION.get("active_view", "location")
+    active_view = SESSION.get("active_view", "crawling")
     links = []
     for view_id, label in _VIEWS:
         cls = "sidebar-link active" if view_id == active_view else "sidebar-link"
@@ -1911,7 +1993,7 @@ def render_page():
     a time (see SESSION["active_view"]); the header/sidebar are always
     shown regardless of which view is active."""
 
-    active_view = SESSION.get("active_view", "location")
-    view_fn = _VIEW_RENDERERS.get(active_view, _render_location_view)
+    active_view = SESSION.get("active_view", "crawling")
+    view_fn = _VIEW_RENDERERS.get(active_view, _render_crawling_view)
 
     return _render_sidebar() + _render_header() + view_fn()
