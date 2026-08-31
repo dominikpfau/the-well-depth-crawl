@@ -679,6 +679,7 @@ def _default_session() -> dict:
         "crawl_depth": 0,
         "crawl_history": [],
         "crawl_current_id": None,
+        "crawl_viewed_id": None,
         "treasure": None,
         "treasure_dc": DEFAULT_TREASURE_DC,
         "encounter_dc": DEFAULT_ENCOUNTER_DC,
@@ -855,6 +856,7 @@ def handle_action(
     detail_form=None,
     monster_form=None,
     quality_form=None,
+    room_form=None,
 ):
     """
     Mirrors the POST branch of the original Flask route.
@@ -897,6 +899,11 @@ def handle_action(
     the Treasure Generator's quality dropdown (picks a specific tier
     instead of rolling into one). Same empty-string-or-None-means-
     Random convention as the other dropdowns.
+
+    `room_form` is Crawling Mode's "Enter Room" dropdown - the id of
+    an already-visited, deeper room to step into (only used by
+    "enter_room"; not a standing preference, so it's read fresh from
+    the form each time rather than persisted in SESSION).
     """
     global SESSION
 
@@ -905,6 +912,7 @@ def handle_action(
     crawl_depth = SESSION.get("crawl_depth", 0)
     crawl_history = list(SESSION.get("crawl_history", []))
     crawl_current_id = SESSION.get("crawl_current_id")
+    crawl_viewed_id = SESSION.get("crawl_viewed_id")
     treasure = SESSION.get("treasure")
     encounter_check = SESSION.get("encounter_check")
     active_view = SESSION.get("active_view", "crawling")
@@ -965,6 +973,7 @@ def handle_action(
         crawl_history.append(new_room)
         crawl_current_id = new_room["id"]
         crawl_depth += 1
+        crawl_viewed_id = None  # show the newly-entered room, not whatever was being viewed
 
     elif action == "go_back":
         # Moves focus to the room the current one was reached from -
@@ -980,6 +989,35 @@ def handle_action(
             parent_room = _room_by_id(crawl_history, current_room["parent_id"])
             crawl_current_id = current_room["parent_id"]
             crawl_depth = parent_room["used_depth"] + 1
+            crawl_viewed_id = None
+
+    elif action == "view_room":
+        # Purely passive: changes which room's card is shown, never
+        # moves the party. Any room in the whole history can be
+        # viewed this way, regardless of how it relates to where we
+        # are now - clicking around the Dungeon Map to look at things
+        # is always safe. `room_form` is validated against the real
+        # room list rather than trusted outright.
+        target_id = _to_int_or_none(room_form)
+        if target_id is not None and _room_by_id(crawl_history, target_id) is not None:
+            crawl_viewed_id = target_id
+
+    elif action == "enter_room":
+        # Actually moves the party into a room someone is currently
+        # viewing (the Crawling Mode room card's "Go Here" button) -
+        # only offered, and only allowed here, when that room is a
+        # *direct* neighbor of wherever we are now (its parent, or
+        # one of its direct children): one step away, same as "Go
+        # Back"/"Go Deeper" would take you, just without generating
+        # anything since the room already exists. `room_form` is
+        # re-validated against that adjacency rule rather than
+        # trusted outright.
+        target_id = _to_int_or_none(room_form)
+        if target_id is not None and _is_adjacent_room(target_id, crawl_current_id, crawl_history):
+            target_room = _room_by_id(crawl_history, target_id)
+            crawl_current_id = target_id
+            crawl_depth = target_room["used_depth"] + 1
+            crawl_viewed_id = None
 
     elif action == "check_encounter":
         # A standalone risk check (e.g. searching around, listening at
@@ -1099,6 +1137,7 @@ def handle_action(
         "crawl_depth": crawl_depth,
         "crawl_history": crawl_history,
         "crawl_current_id": crawl_current_id,
+        "crawl_viewed_id": crawl_viewed_id,
         "treasure": treasure,
         "treasure_dc": treasure_dc,
         "encounter_dc": encounter_dc,
@@ -1441,7 +1480,7 @@ def _render_room_roll_badge(label, roll, depth, show_rolls):
     return f'<span class="meta-badge">{label} rolled {format_roll(raw, depth)} = {roll}</span>'
 
 
-def _render_room_card(room, show_rolls=True, status_note=""):
+def _render_room_card(room, show_rolls=True, status_note="", status_extra_html=""):
     """
     Renders a room's Location/Detail title, how it was determined,
     both descriptions, and (if present) its Encounter/Treasure
@@ -1456,8 +1495,12 @@ def _render_room_card(room, show_rolls=True, status_note=""):
     front of the name itself.
 
     `status_note`, if given (Crawling Mode's "You are here" / "You
-    are here (revisited)"), is folded into the same meta-line as the
-    depth and roll badges, rather than a separate line above it.
+    are here (revisited)" / "Viewing only"), is folded into the same
+    meta-line as the depth and roll badges, rather than a separate
+    line above it. `status_extra_html`, if given, is placed right
+    after it - used for the small "Go Here" button that shows up next
+    to "Viewing only" when that room happens to be a direct neighbor
+    of wherever the party actually is.
     """
     loc_badge = _render_room_roll_badge("Location", room["location_roll"], room["used_depth"], show_rolls)
     det_badge = _render_room_roll_badge("Detail", room["detail_roll"], room["used_depth"], show_rolls)
@@ -1465,6 +1508,8 @@ def _render_room_card(room, show_rolls=True, status_note=""):
     meta_line = f"Depth {room['used_depth']}"
     if status_note:
         meta_line += f" &middot; {status_note}"
+    if status_extra_html:
+        meta_line += f" {status_extra_html}"
     for badge in (loc_badge, det_badge):
         if badge:
             meta_line += f" {badge}"
@@ -1658,20 +1703,36 @@ def _render_treasure_view():
     """
 
 
-def _render_crawl_entry_full(room, is_fresh=True):
-    """Highlighted card for the room currently at the top of the
-    trail - where the party actually is right now.
+def _render_crawl_entry_full(room, is_current_position, is_fresh, go_here_html=""):
+    """
+    Card for whichever room the Crawling Mode view is currently
+    showing:
 
-    `is_fresh=False` means this room was revisited via "Go Back"
-    rather than just generated - the room's contents (monsters,
-    treasure, and now also which Location/Detail it is) are still
-    shown, but not any of the rolls that produced them back when it
-    was first entered (see _render_room_card's `show_rolls`)."""
-    status_note = "You are here" + ("" if is_fresh else " (revisited)")
+    - The actual current position: highlighted border, "You are here"
+      (or "... (revisited)" if it wasn't just generated), and rolls
+      shown only when it's the freshest room in the whole history
+      (see _render_crawling_view's is_fresh).
+    - Any other room someone clicked in the Dungeon Map just to look
+      at: plain styling, "Viewing only" instead of "You are here", no
+      rolls (same as revisiting) - and, if that room happens to be a
+      direct neighbor of the real current position, a small "Go Here"
+      button right next to that note (passed in already-rendered,
+      since whether it's offered depends on adjacency, computed by
+      the caller).
+    """
+    if is_current_position:
+        card_class = "crawl-entry-current"
+        status_note = "You are here" + ("" if is_fresh else " (revisited)")
+        show_rolls = is_fresh
+        go_here_html = ""
+    else:
+        card_class = "crawl-entry-viewing"
+        status_note = "Viewing only"
+        show_rolls = False
 
     return f"""
-    <div class="crawl-entry crawl-entry-current">
-        {_render_room_card(room, show_rolls=is_fresh, status_note=status_note)}
+    <div class="{card_class}">
+        {_render_room_card(room, show_rolls=show_rolls, status_note=status_note, status_extra_html=go_here_html)}
     </div>
     """
 
@@ -1714,6 +1775,25 @@ def _build_children_map(history):
     for room in history:
         children.setdefault(room["parent_id"], []).append(room)
     return children
+
+
+def _is_adjacent_room(room_id, current_id, history):
+    """
+    True if `room_id` is a direct neighbor of the current room - its
+    parent, or one of its direct children. Determines when the
+    Crawling Mode room card's "Go Here" button appears: viewing any
+    room is always fine, but actually moving there is only offered
+    (and only allowed, by handle_action's "enter_room") when it's a
+    single step away - the same reach "Go Back"/"Go Deeper" have,
+    just onto a room that already exists.
+    """
+    if room_id is None or current_id is None or room_id == current_id:
+        return False
+    room = _room_by_id(history, room_id)
+    current_room = _room_by_id(history, current_id)
+    if room is None or current_room is None:
+        return False
+    return room["parent_id"] == current_id or current_room["parent_id"] == room_id
 
 
 _TREE_CHILD_VISIBLE_LIMIT = 4
@@ -1883,14 +1963,33 @@ def _render_dungeon_map(history, current_id):
             continue
 
         room = node["room"]
-        cls = "dtree-node"
+        cls = "dtree-node dtree-node-clickable"
+        room_id = room["id"]
         if room["id"] == current_id:
+            # Always clickable too - if some other room is currently
+            # being viewed, this is how the view snaps back to the
+            # actual current position.
             cls += " dtree-node-current"
-        elif room["id"] in path_ids:
-            cls += " dtree-node-path"
+            attrs = (
+                f' onclick="viewRoom({room_id})" '
+                f'title="View current room" role="button" tabindex="0"'
+            )
+        else:
+            # Every room other than the current one is viewable -
+            # click it to show its card below (without moving there;
+            # see _render_crawling_view / "view_room"). The
+            # highlighting itself (path vs. an unrelated branch)
+            # stays exactly as before - this only adds the ability to
+            # click, on top of whichever style already applies.
+            if room["id"] in path_ids:
+                cls += " dtree-node-path"
+            attrs = (
+                f' onclick="viewRoom({room_id})" '
+                f'title="View this room" role="button" tabindex="0"'
+            )
 
         boxes.append(
-            f'<div class="{cls}" style="{box_style}">'
+            f'<div class="{cls}" style="{box_style}"{attrs}>'
             f'{room["location"]}<br><small>{room["detail"]}</small></div>'
         )
 
@@ -1953,13 +2052,30 @@ def _render_crawling_view():
     # i.e. nothing has been generated after it yet. Revisiting it
     # later via "Go Back" naturally makes it non-fresh, and going
     # deeper again from it (a new branch) creates a new room that
-    # takes over as the fresh one.
+    # takes over as the fresh one. Only meaningful when actually
+    # viewing the current position - see is_current_position below.
     is_fresh = current_room["id"] == len(history) - 1
+
+    # Whichever room was last clicked in the Dungeon Map (or the
+    # current room itself, if nothing was clicked / after moving -
+    # see handle_action resetting crawl_viewed_id on every move).
+    viewed_id = SESSION.get("crawl_viewed_id")
+    if viewed_id is None:
+        viewed_id = current_id
+    viewed_room = _room_by_id(history, viewed_id) or current_room
+    is_current_position = viewed_room["id"] == current_id
+
+    go_here_html = ""
+    if not is_current_position and _is_adjacent_room(viewed_room["id"], current_id, history):
+        go_here_html = (
+            f'<button type="button" class="go-here-button" '
+            f'onclick="enterRoom({viewed_room["id"]})">Go Here</button>'
+        )
 
     current_card = f"""
     <div class="section">
         <div class="crawl-history">
-            {_render_crawl_entry_full(current_room, is_fresh=is_fresh)}
+            {_render_crawl_entry_full(viewed_room, is_current_position, is_fresh, go_here_html)}
         </div>
     </div>
     """

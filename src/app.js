@@ -63,7 +63,7 @@ function renderApp() {
     document.getElementById("app").innerHTML = html;
 }
 
-async function dispatch(action, view) {
+async function dispatch(action, view, roomId) {
     try {
         pyGame.handle_action(
             action,
@@ -78,7 +78,8 @@ async function dispatch(action, view) {
             getSelectField("location-select"),
             getSelectField("detail-select"),
             getSelectField("monster-select"),
-            getSelectField("quality-select")
+            getSelectField("quality-select"),
+            roomId == null ? null : String(roomId)
         );
         renderApp();
     } catch (err) {
@@ -87,15 +88,23 @@ async function dispatch(action, view) {
 }
 
 async function runAction(action) {
-    return dispatch(action, null);
+    return dispatch(action, null, null);
 }
 
 async function onLevelChange() {
-    return dispatch(null, null);
+    return dispatch(null, null, null);
 }
 
 async function switchView(view) {
-    return dispatch("switch_view", view);
+    return dispatch("switch_view", view, null);
+}
+
+async function enterRoom(roomId) {
+    return dispatch("enter_room", null, roomId);
+}
+
+async function viewRoom(roomId) {
+    return dispatch("view_room", null, roomId);
 }
 
 function toggleSidebar() {
