@@ -28,6 +28,7 @@ from data import (
     LOCATIONS, DETAILS,
     LOCATION_MODIFIERS, DETAIL_MODIFIERS,
     LOCATION_DESCRIPTIONS, DETAIL_DESCRIPTIONS,
+    LOCATION_TRAITS, DETAIL_TRAITS,
     TREASURE_TABLES, TREASURE_QUALITY_TABLE, TREASURE_EXTRA_ITEMS_TABLE,
     CONSUMABLE_SUBTYPES, AMPULES_TABLE, POTIONS_TABLE, MISCELLANY_TABLE, ARTIFACTS_TABLE,
     NEXT_LEVEL, ROLL_TWICE, MONSTERS, MONSTERS_WITHOUT_TREASURE, ENCOUNTER_TABLES,
@@ -743,6 +744,20 @@ def _resolve_choice(form_value, current):
     return form_value or None
 
 
+def _room_blocks_deeper(room) -> bool:
+    """
+    True if this room's location or detail has a trait that rules out
+    going deeper from here (currently just "Dead End", see
+    DETAIL_TRAITS in data.py) - used to disable/reject "Go Deeper"
+    from Crawling Mode while standing in such a room.
+    """
+    if room is None:
+        return False
+    loc_traits = LOCATION_TRAITS.get(room["location"], {})
+    det_traits = DETAIL_TRAITS.get(room["detail"], {})
+    return bool(loc_traits.get("blocks_deeper") or det_traits.get("blocks_deeper"))
+
+
 def _generate_room(
     used_depth, level, level_modifiers, roll_treasure, roll_encounter,
     treasure_dc, encounter_dc, forced_location=None, forced_detail=None,
@@ -964,16 +979,23 @@ def handle_action(
         # which one is "where we are now", and _crawl_path_to_current()
         # walks parent_id links to reconstruct the active path through
         # it for display.
-        new_room, treasure_dc, encounter_dc = _generate_room(
-            crawl_depth, level, level_modifiers, True, True,
-            treasure_dc, encounter_dc,
-        )
-        new_room["id"] = len(crawl_history)
-        new_room["parent_id"] = crawl_current_id
-        crawl_history.append(new_room)
-        crawl_current_id = new_room["id"]
-        crawl_depth += 1
-        crawl_viewed_id = None  # show the newly-entered room, not whatever was being viewed
+        #
+        # A room whose location/detail is a dead end (see
+        # _room_blocks_deeper) refuses this outright - checked here
+        # too, not just via the disabled button in the UI, since the
+        # button state is just a convenience, not the actual guard.
+        current_room = _room_by_id(crawl_history, crawl_current_id)
+        if not _room_blocks_deeper(current_room):
+            new_room, treasure_dc, encounter_dc = _generate_room(
+                crawl_depth, level, level_modifiers, True, True,
+                treasure_dc, encounter_dc,
+            )
+            new_room["id"] = len(crawl_history)
+            new_room["parent_id"] = crawl_current_id
+            crawl_history.append(new_room)
+            crawl_current_id = new_room["id"]
+            crawl_depth += 1
+            crawl_viewed_id = None  # show the newly-entered room, not whatever was being viewed
 
     elif action == "go_back":
         # Moves focus to the room the current one was reached from -
@@ -2023,6 +2045,14 @@ def _render_crawling_view():
         else "No previous room to go back to"
     )
 
+    blocks_deeper = _room_blocks_deeper(current_room)
+    go_deeper_disabled = "disabled" if blocks_deeper else ""
+    go_deeper_title = (
+        "This is a dead end - there's no way to go deeper from here"
+        if blocks_deeper
+        else "Descend to a new location"
+    )
+
     controls = f"""
     <div class="section">
         <div class="meta-line">Current Depth: {depth}</div>
@@ -2033,7 +2063,7 @@ def _render_crawling_view():
             <button type="button" disabled title="Not implemented yet" onclick="runAction('stay')">
                 Stay
             </button>
-            <button type="button" class="primary-action" onclick="runAction('go_deeper')">
+            <button type="button" class="primary-action" {go_deeper_disabled} title="{go_deeper_title}" onclick="runAction('go_deeper')">
                 Go Deeper
             </button>
         </div>

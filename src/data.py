@@ -391,6 +391,22 @@ DETAIL_MODIFIERS = {
 }
 
 # ----------------------------
+# LOCATION/DETAIL TRAITS
+# ----------------------------
+# Structured, machine-readable consequences for specific locations or
+# details, beyond what's described in prose in LOCATION_DESCRIPTIONS /
+# DETAIL_DESCRIPTIONS - e.g. "Dead End" saying in its own text that
+# there's no way to go deeper from here becomes a real, enforced rule
+# here instead of just flavor text. Most locations/details have no
+# entry at all (nothing structured beyond their description) - only
+# add one here once there's an actual rule to enforce.
+LOCATION_TRAITS = {}
+
+DETAIL_TRAITS = {
+    "Dead End": {"blocks_deeper": True},
+}
+
+# ----------------------------
 # TREASURE GENERATOR
 # ----------------------------
 
