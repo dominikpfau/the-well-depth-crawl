@@ -63,56 +63,10 @@ function renderApp() {
     document.getElementById("app").innerHTML = html;
 }
 
-async function runAction(action) {
+async function dispatch(action, view) {
     try {
         pyGame.handle_action(
             action,
-            getDepthArg(),
-            getLevel(),
-            null,
-            getCheckbox("roll-treasure"),
-            getCheckbox("roll-encounter"),
-            getCheckbox("encounter-roll-treasure"),
-            getIntFieldArg("encounter-dc"),
-            getIntFieldArg("treasure-dc"),
-            getSelectField("location-select"),
-            getSelectField("detail-select"),
-            getSelectField("monster-select"),
-            getSelectField("quality-select")
-        );
-        renderApp();
-    } catch (err) {
-        showError(err);
-    }
-}
-
-async function onLevelChange() {
-    try {
-        pyGame.handle_action(
-            null,
-            getDepthArg(),
-            getLevel(),
-            null,
-            getCheckbox("roll-treasure"),
-            getCheckbox("roll-encounter"),
-            getCheckbox("encounter-roll-treasure"),
-            getIntFieldArg("encounter-dc"),
-            getIntFieldArg("treasure-dc"),
-            getSelectField("location-select"),
-            getSelectField("detail-select"),
-            getSelectField("monster-select"),
-            getSelectField("quality-select")
-        );
-        renderApp();
-    } catch (err) {
-        showError(err);
-    }
-}
-
-async function switchView(view) {
-    try {
-        pyGame.handle_action(
-            "switch_view",
             getDepthArg(),
             getLevel(),
             view,
@@ -130,6 +84,18 @@ async function switchView(view) {
     } catch (err) {
         showError(err);
     }
+}
+
+async function runAction(action) {
+    return dispatch(action, null);
+}
+
+async function onLevelChange() {
+    return dispatch(null, null);
+}
+
+async function switchView(view) {
+    return dispatch("switch_view", view);
 }
 
 function toggleSidebar() {

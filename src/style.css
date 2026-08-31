@@ -207,12 +207,6 @@
         font-size: 0.85rem;
     }
 
-    footer {
-        margin-top: 3rem;
-        font-size: 0.8rem;
-        opacity: 0.6;
-    }
-
     /* ------------------------
        Page Header (h1 + sidebar toggle, in index.html)
        ------------------------ */

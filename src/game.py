@@ -544,6 +544,26 @@ def roll_monster_treasure(monsters, level, level_modifiers, current_dc):
     }
 
 
+def _roll_monster_treasure_if_enabled(monsters, level, level_modifiers, treasure_dc, enabled):
+    """
+    Thin wrapper around roll_monster_treasure() for the two Encounter
+    Generator actions ("check_encounter" and "generate_encounter"),
+    which otherwise both repeat the same "roll it, then advance
+    treasure_dc if it actually rolled" dance. `enabled` is the
+    Encounter Generator's "Roll for Treasure" checkbox - when off, no
+    roll is attempted at all and treasure_dc is left untouched.
+
+    Returns (monster_treasure_or_None, updated_treasure_dc).
+    """
+    if not enabled:
+        return None, treasure_dc
+
+    monster_treasure = roll_monster_treasure(monsters, level, level_modifiers, treasure_dc)
+    if monster_treasure is not None:
+        treasure_dc = monster_treasure["next_dc"]
+    return monster_treasure, treasure_dc
+
+
 def _validate_encounter_data() -> None:
     """
     Sanity-checks ENCOUNTER_TABLES / MONSTERS from data.py. Runs once
@@ -688,6 +708,38 @@ def _to_int_or_none(value):
     if value is None or value == "":
         return None
     return int(value)
+
+
+# The three little "resolve this field from the incoming form, or
+# fall back to whatever was already in the session" patterns that
+# handle_action's growing list of form fields all reduce to. Pulling
+# them out here is what keeps that function's parameter-reading section
+# from re-growing into a wall of near-identical `if x_form is not
+# None: ...` blocks every time a new form field gets added.
+
+def _resolve_int(form_value, current):
+    """For plain numeric fields (depth, the two DC inputs): use the
+    submitted value if it parses to a number, otherwise keep the
+    current session value unchanged."""
+    value = _to_int_or_none(form_value)
+    return current if value is None else value
+
+
+def _resolve_bool(form_value, current):
+    """For checkboxes: `None` means the checkbox isn't in the DOM
+    right now (a different view is active) - keep the current value.
+    Anything else is the checkbox's actual (JS boolean) state."""
+    return current if form_value is None else bool(form_value)
+
+
+def _resolve_choice(form_value, current):
+    """For the "pick a specific X, or leave on Random" dropdowns:
+    `None` means the field isn't in the DOM right now - keep the
+    current value. An empty string means "present, but set back to
+    Random" - resolves to None (no forced choice)."""
+    if form_value is None:
+        return current
+    return form_value or None
 
 
 def _generate_room(
@@ -854,49 +906,26 @@ def handle_action(
     crawl_history = list(SESSION.get("crawl_history", []))
     crawl_current_id = SESSION.get("crawl_current_id")
     treasure = SESSION.get("treasure")
-    treasure_dc = SESSION.get("treasure_dc", DEFAULT_TREASURE_DC)
-    encounter_dc = SESSION.get("encounter_dc", DEFAULT_ENCOUNTER_DC)
     encounter_check = SESSION.get("encounter_check")
     active_view = SESSION.get("active_view", "crawling")
-    roll_treasure = SESSION.get("roll_treasure", True)
-    roll_encounter = SESSION.get("roll_encounter", True)
-    encounter_roll_treasure = SESSION.get("encounter_roll_treasure", True)
-    forced_location = SESSION.get("forced_location")
-    forced_detail = SESSION.get("forced_detail")
-    forced_monster = SESSION.get("forced_monster")
-    forced_quality = SESSION.get("forced_quality")
-
-    # read depth/level "from the form", same as the Flask version did
-    depth_raw = _to_int_or_none(depth_form)
-    if depth_raw is not None:
-        depth = depth_raw
 
     level = _to_int_or_none(level_form)
     level_modifiers = LEVEL_MODIFIERS.get(level, {})
 
-    encounter_dc_raw = _to_int_or_none(encounter_dc_form)
-    if encounter_dc_raw is not None:
-        encounter_dc = encounter_dc_raw
+    depth = _resolve_int(depth_form, depth)
+    encounter_dc = _resolve_int(encounter_dc_form, SESSION.get("encounter_dc", DEFAULT_ENCOUNTER_DC))
+    treasure_dc = _resolve_int(treasure_dc_form, SESSION.get("treasure_dc", DEFAULT_TREASURE_DC))
 
-    treasure_dc_raw = _to_int_or_none(treasure_dc_form)
-    if treasure_dc_raw is not None:
-        treasure_dc = treasure_dc_raw
+    roll_treasure = _resolve_bool(roll_treasure_form, SESSION.get("roll_treasure", True))
+    roll_encounter = _resolve_bool(roll_encounter_form, SESSION.get("roll_encounter", True))
+    encounter_roll_treasure = _resolve_bool(
+        encounter_roll_treasure_form, SESSION.get("encounter_roll_treasure", True)
+    )
 
-    if location_form is not None:
-        forced_location = location_form or None
-    if detail_form is not None:
-        forced_detail = detail_form or None
-    if monster_form is not None:
-        forced_monster = monster_form or None
-    if quality_form is not None:
-        forced_quality = quality_form or None
-
-    if roll_treasure_form is not None:
-        roll_treasure = bool(roll_treasure_form)
-    if roll_encounter_form is not None:
-        roll_encounter = bool(roll_encounter_form)
-    if encounter_roll_treasure_form is not None:
-        encounter_roll_treasure = bool(encounter_roll_treasure_form)
+    forced_location = _resolve_choice(location_form, SESSION.get("forced_location"))
+    forced_detail = _resolve_choice(detail_form, SESSION.get("forced_detail"))
+    forced_monster = _resolve_choice(monster_form, SESSION.get("forced_monster"))
+    forced_quality = _resolve_choice(quality_form, SESSION.get("forced_quality"))
 
     if action == "room":
         used_depth = depth
@@ -972,13 +1001,9 @@ def handle_action(
             if check["success"]
             else None
         )
-        monster_treasure = (
-            roll_monster_treasure(monsters, level, level_modifiers, treasure_dc)
-            if encounter_roll_treasure
-            else None
+        monster_treasure, treasure_dc = _roll_monster_treasure_if_enabled(
+            monsters, level, level_modifiers, treasure_dc, encounter_roll_treasure
         )
-        if monster_treasure is not None:
-            treasure_dc = monster_treasure["next_dc"]
 
         encounter_check = {
             "mode": "rolled",
@@ -999,13 +1024,9 @@ def handle_action(
         # monster's own loot (if any) is still a real DC-gated
         # treasure roll though, same as everywhere else.
         monsters = roll_encounter_group(level if level else 1, forced_monster=forced_monster)
-        monster_treasure = (
-            roll_monster_treasure(monsters, level, level_modifiers, treasure_dc)
-            if encounter_roll_treasure
-            else None
+        monster_treasure, treasure_dc = _roll_monster_treasure_if_enabled(
+            monsters, level, level_modifiers, treasure_dc, encounter_roll_treasure
         )
-        if monster_treasure is not None:
-            treasure_dc = monster_treasure["next_dc"]
 
         encounter_check = {
             "mode": "generated",
