@@ -448,3 +448,11 @@
         filter: brightness(1.3);
         outline: none;
     }
+
+    .dtree-node-viewed {
+        /* An outline sits outside the box's own border, so this
+           layers cleanly on top of whatever border color the room
+           already has (current/path/plain) without fighting it. */
+        outline: 2px solid #6a9fd8;
+        outline-offset: 2px;
+    }

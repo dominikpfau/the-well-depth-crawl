@@ -1899,13 +1899,16 @@ def _flatten_tree(node, depth, x_cache, parent_entry, out):
     return out
 
 
-def _render_dungeon_map(history, current_id):
+def _render_dungeon_map(history, current_id, viewed_id=None):
     """
     A tree diagram of every room ever generated (across every branch)
     - not just the path to the current one. The room we're at now is
     highlighted; everything on the path leading to it is subtly
     marked too, so the route taken is visible at a glance among
-    unrelated branches.
+    unrelated branches. Whichever room the card below is currently
+    showing (which may or may not be the current position - see
+    "view_room") gets its own marker too, so it's clear at a glance
+    which box the card corresponds to.
 
     Unlike an earlier version of this, every box's position is a
     plain (column, row) pair computed in Python (_compute_tree_x /
@@ -2010,6 +2013,14 @@ def _render_dungeon_map(history, current_id):
                 f'title="View this room" role="button" tabindex="0"'
             )
 
+        if room["id"] == viewed_id:
+            # Whichever room the card below is actually showing right
+            # now - separate from "current" (where the party is) and
+            # "path" (how we got there), since viewing a room never
+            # moves anyone; this can be any of the three at once (e.g.
+            # the current room is, by default, also the viewed one).
+            cls += " dtree-node-viewed"
+
         boxes.append(
             f'<div class="{cls}" style="{box_style}"{attrs}>'
             f'{room["location"]}<br><small>{room["detail"]}</small></div>'
@@ -2110,7 +2121,7 @@ def _render_crawling_view():
     </div>
     """
 
-    return controls + current_card + _render_dungeon_map(history, current_id)
+    return controls + current_card + _render_dungeon_map(history, current_id, viewed_room["id"])
 
 
 # ----------------------------
