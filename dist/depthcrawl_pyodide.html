@@ -2553,6 +2553,12 @@ def _generate_room(
         "detail_text": DETAIL_DESCRIPTIONS.get(detail, "No description available."),
         "treasure_result": None,
         "entering_encounter": None,
+        # Whether this room's own connection to its parent (in
+        # Crawling Mode's room tree) is currently passable - only
+        # meaningful there; the Location Generator's room never gets
+        # a parent_id in the first place. See _is_adjacent_room() and
+        # the "toggle_connection" action.
+        "connection_blocked": False,
     }
 
     # --- Roll the treasure hidden in this location, right now. Shown
@@ -2753,15 +2759,20 @@ def handle_action(
 
     elif action == "go_back":
         # Moves focus to the room the current one was reached from -
-        # a no-op if there's no history yet or we're already at the
-        # very first room (no parent to go back to). Doesn't touch
-        # crawl_history at all - that room is still there, just no
-        # longer the "current" one. crawl_depth is reset to right
-        # after the parent room, so a subsequent "go_deeper" branches
-        # off from there rather than continuing from however deep the
-        # abandoned path had gotten.
+        # a no-op if there's no history yet, we're already at the
+        # very first room (no parent to go back to), or this room's
+        # own connection to its parent has been blocked (see
+        # "toggle_connection"). Doesn't touch crawl_history at all -
+        # that room is still there, just no longer the "current" one.
+        # crawl_depth is reset to right after the parent room, so a
+        # subsequent "go_deeper" branches off from there rather than
+        # continuing from however deep the abandoned path had gotten.
         current_room = _room_by_id(crawl_history, crawl_current_id)
-        if current_room is not None and current_room["parent_id"] is not None:
+        if (
+            current_room is not None
+            and current_room["parent_id"] is not None
+            and not current_room.get("connection_blocked")
+        ):
             parent_room = _room_by_id(crawl_history, current_room["parent_id"])
             crawl_current_id = current_room["parent_id"]
             crawl_depth = parent_room["used_depth"] + 1
@@ -2794,6 +2805,22 @@ def handle_action(
             crawl_current_id = target_id
             crawl_depth = target_room["used_depth"] + 1
             crawl_viewed_id = None
+
+    elif action == "toggle_connection":
+        # Blocks or unblocks the room currently being viewed's own
+        # connection to its parent - a manual, general-purpose switch
+        # for now (a room card button), but the same flag a future
+        # automatic effect (e.g. a "Fragile" detail's "collapsing
+        # entrance" outcome) would set. Only meaningful for a room
+        # that actually has a parent - the very first room has
+        # nothing to toggle. `room_form` identifies which room's card
+        # the button was clicked from (normally crawl_viewed_id, but
+        # re-validated rather than trusted outright).
+        target_id = _to_int_or_none(room_form)
+        if target_id is not None:
+            target_room = _room_by_id(crawl_history, target_id)
+            if target_room is not None and target_room["parent_id"] is not None:
+                target_room["connection_blocked"] = not target_room.get("connection_blocked")
 
     elif action == "check_encounter":
         # A standalone risk check (e.g. searching around, listening at
@@ -3479,7 +3506,7 @@ def _render_treasure_view():
     """
 
 
-def _render_crawl_entry_full(room, is_current_position, is_fresh, go_here_html=""):
+def _render_crawl_entry_full(room, is_current_position, is_fresh, extra_buttons_html=""):
     """
     Card for whichever room the Crawling Mode view is currently
     showing:
@@ -3490,17 +3517,17 @@ def _render_crawl_entry_full(room, is_current_position, is_fresh, go_here_html="
       (see _render_crawling_view's is_fresh).
     - Any other room someone clicked in the Dungeon Map just to look
       at: plain styling, "Viewing only" instead of "You are here", no
-      rolls (same as revisiting) - and, if that room happens to be a
-      direct neighbor of the real current position, a small "Go Here"
-      button right next to that note (passed in already-rendered,
-      since whether it's offered depends on adjacency, computed by
-      the caller).
+      rolls (same as revisiting).
+
+    `extra_buttons_html` (e.g. "Go Here" / "Block Entrance") is placed
+    right after that status note either way - which buttons actually
+    apply (some, like "Go Here", only make sense for a room other
+    than the current position) is decided by the caller, not here.
     """
     if is_current_position:
         card_class = "crawl-entry-current"
         status_note = "You are here" + ("" if is_fresh else " (revisited)")
         show_rolls = is_fresh
-        go_here_html = ""
     else:
         card_class = "crawl-entry-viewing"
         status_note = "Viewing only"
@@ -3508,7 +3535,7 @@ def _render_crawl_entry_full(room, is_current_position, is_fresh, go_here_html="
 
     return f"""
     <div class="{card_class}">
-        {_render_room_card(room, show_rolls=show_rolls, status_note=status_note, status_extra_html=go_here_html)}
+        {_render_room_card(room, show_rolls=show_rolls, status_note=status_note, status_extra_html=extra_buttons_html)}
     </div>
     """
 
@@ -3556,12 +3583,14 @@ def _build_children_map(history):
 def _is_adjacent_room(room_id, current_id, history):
     """
     True if `room_id` is a direct neighbor of the current room - its
-    parent, or one of its direct children. Determines when the
-    Crawling Mode room card's "Go Here" button appears: viewing any
-    room is always fine, but actually moving there is only offered
-    (and only allowed, by handle_action's "enter_room") when it's a
-    single step away - the same reach "Go Back"/"Go Deeper" have,
-    just onto a room that already exists.
+    parent, or one of its direct children - AND the connection
+    between them hasn't been blocked (see "toggle_connection").
+    Determines when the Crawling Mode room card's "Go Here" button
+    appears: viewing any room is always fine, but actually moving
+    there is only offered (and only allowed, by handle_action's
+    "enter_room") when it's a single, passable step away - the same
+    reach "Go Back"/"Go Deeper" have, just onto a room that already
+    exists.
     """
     if room_id is None or current_id is None or room_id == current_id:
         return False
@@ -3569,7 +3598,11 @@ def _is_adjacent_room(room_id, current_id, history):
     current_room = _room_by_id(history, current_id)
     if room is None or current_room is None:
         return False
-    return room["parent_id"] == current_id or current_room["parent_id"] == room_id
+    if room["parent_id"] == current_id:
+        return not room.get("connection_blocked")
+    if current_room["parent_id"] == room_id:
+        return not current_room.get("connection_blocked")
+    return False
 
 
 _TREE_CHILD_VISIBLE_LIMIT = 4
@@ -3717,11 +3750,35 @@ def _render_dungeon_map(history, current_id, viewed_id=None):
         y_child_bottom = cy1 + _TREE_NODE_HEIGHT / 2
         y_parent_top = cy2 - _TREE_NODE_HEIGHT / 2
         mid_y = (y_child_bottom + y_parent_top) / 2
+
+        # A blocked connection (see "toggle_connection") still shows
+        # the line at its normal solid gray - the entrance existed,
+        # it's just not usable right now - marked with a small red
+        # cross where it crosses the horizontal jog, instead of
+        # vanishing and making the room look unreachable from
+        # anywhere, or turning the whole line into a busier
+        # dashed style.
+        child_room = entry["node"].get("room")
+        is_blocked = bool(child_room and child_room.get("connection_blocked"))
+
         lines.append(
             f'<path d="M {cx1:.1f} {y_child_bottom:.1f} '
             f'V {mid_y:.1f} H {cx2:.1f} V {y_parent_top:.1f}" '
             f'fill="none" stroke="#555" stroke-width="2" />'
         )
+
+        if is_blocked:
+            mark_x = (cx1 + cx2) / 2
+            mark_y = mid_y
+            r = 6
+            lines.append(
+                f'<line x1="{mark_x - r:.1f}" y1="{mark_y - r:.1f}" '
+                f'x2="{mark_x + r:.1f}" y2="{mark_y + r:.1f}" '
+                f'stroke="#b71c1c" stroke-width="2.5" stroke-linecap="round" />'
+                f'<line x1="{mark_x - r:.1f}" y1="{mark_y + r:.1f}" '
+                f'x2="{mark_x + r:.1f}" y2="{mark_y - r:.1f}" '
+                f'stroke="#b71c1c" stroke-width="2.5" stroke-linecap="round" />'
+            )
 
     boxes = []
     for entry in flat:
@@ -3802,13 +3859,16 @@ def _render_crawling_view():
     depth = SESSION.get("crawl_depth", 0)
 
     current_room = _room_by_id(history, current_id)
-    can_go_back = bool(current_room and current_room["parent_id"] is not None)
+    has_parent = bool(current_room and current_room["parent_id"] is not None)
+    entrance_blocked = bool(current_room and current_room.get("connection_blocked"))
+    can_go_back = has_parent and not entrance_blocked
     go_back_disabled = "" if can_go_back else "disabled"
-    go_back_title = (
-        "Go back to the previous room"
-        if can_go_back
-        else "No previous room to go back to"
-    )
+    if not has_parent:
+        go_back_title = "No previous room to go back to"
+    elif entrance_blocked:
+        go_back_title = "The entrance to this room is blocked - you can't go back this way"
+    else:
+        go_back_title = "Go back to the previous room"
 
     blocks_deeper = _room_blocks_deeper(current_room)
     go_deeper_disabled = "disabled" if blocks_deeper else ""
@@ -3867,10 +3927,21 @@ def _render_crawling_view():
             f'onclick="enterRoom({viewed_room["id"]})">Go Here</button>'
         )
 
+    toggle_connection_html = ""
+    if viewed_room["parent_id"] is not None:
+        # Available on any room with a parent - including the current
+        # position itself (e.g. blocking your own way back), not just
+        # while merely viewing some other room.
+        toggle_label = "Unblock Entrance" if viewed_room.get("connection_blocked") else "Block Entrance"
+        toggle_connection_html = (
+            f'<button type="button" class="go-here-button" '
+            f'onclick="toggleConnection({viewed_room["id"]})">{toggle_label}</button>'
+        )
+
     current_card = f"""
     <div class="section">
         <div class="crawl-history">
-            {_render_crawl_entry_full(viewed_room, is_current_position, is_fresh, go_here_html)}
+            {_render_crawl_entry_full(viewed_room, is_current_position, is_fresh, go_here_html + toggle_connection_html)}
         </div>
     </div>
     """
@@ -4063,6 +4134,10 @@ async function enterRoom(roomId) {
 
 async function viewRoom(roomId) {
     return dispatch("view_room", null, roomId);
+}
+
+async function toggleConnection(roomId) {
+    return dispatch("toggle_connection", null, roomId);
 }
 
 function toggleSidebar() {

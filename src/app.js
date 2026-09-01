@@ -107,6 +107,10 @@ async function viewRoom(roomId) {
     return dispatch("view_room", null, roomId);
 }
 
+async function toggleConnection(roomId) {
+    return dispatch("toggle_connection", null, roomId);
+}
+
 function toggleSidebar() {
     // The toggle button now lives in the static page header (outside
     // #app), so it's clickable even before Pyodide has finished
