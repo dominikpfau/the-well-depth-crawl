@@ -404,6 +404,11 @@ LOCATION_TRAITS = {}
 
 DETAIL_TRAITS = {
     "Dead End": {"blocks_deeper": True},
+    # Both of these say outright "roll on the treasure table" with no
+    # mention of a search/DC check - the treasure is just sitting
+    # there in plain sight, not something that has to be found first.
+    "Treasure Pile": {"guaranteed_treasure": True},
+    "Portcullis": {"guaranteed_treasure": True},
 }
 
 # ----------------------------

@@ -758,6 +758,21 @@ def _room_blocks_deeper(room) -> bool:
     return bool(loc_traits.get("blocks_deeper") or det_traits.get("blocks_deeper"))
 
 
+def _room_has_guaranteed_treasure(room) -> bool:
+    """
+    True if this room's location or detail has a trait meaning its
+    treasure is simply sitting out in the open (e.g. "Treasure Pile",
+    "Portcullis") rather than something that has to be searched for.
+    Such treasure always turns up something - no DC check at all,
+    unlike the normal search-based roll (see roll_location_treasure).
+    """
+    if room is None:
+        return False
+    loc_traits = LOCATION_TRAITS.get(room["location"], {})
+    det_traits = DETAIL_TRAITS.get(room["detail"], {})
+    return bool(loc_traits.get("guaranteed_treasure") or det_traits.get("guaranteed_treasure"))
+
+
 def _generate_room(
     used_depth, level, level_modifiers, roll_treasure, roll_encounter,
     treasure_dc, encounter_dc, forced_location=None, forced_detail=None,
@@ -812,7 +827,28 @@ def _generate_room(
     # anymore. Skipped entirely (room["treasure_result"] stays None)
     # if roll_treasure is False - the Treasure section then just
     # isn't shown, rather than shown empty.
-    if roll_treasure:
+    if roll_treasure and _room_has_guaranteed_treasure(room):
+        # "Treasure Pile"/"Portcullis" etc. - lying out in the open,
+        # not something that has to be searched for: skip the DC
+        # check entirely and just always find something, the same
+        # unconditional roll the Treasure Generator's "Generate
+        # Treasure" button uses. Doesn't touch treasure_dc, since no
+        # check actually happened. raw_roll stays None, which is what
+        # tells _render_treasure_check_result to always render this
+        # plainly - no "Rolled ... vs DC ..." framing, ever - instead
+        # of only when revisiting (see its show_roll handling).
+        generated = generate_treasure(
+            quality_mod=level_modifiers.get("wealth", 0),
+            dungeon_level=used_depth,
+        )
+        room["treasure_result"] = {
+            "raw_roll": None,
+            "mod": None,
+            "treasure_dc_before": None,
+            "found_treasure": generated,
+            "blocked": False,
+        }
+    elif roll_treasure:
         treasure_mods = collect_modifiers(room, trigger="ransack")
         treasure_mods["treasure_roll"] += level_modifiers.get("wealth", 0)
         treasure_mods["treasure_quality"] += level_modifiers.get("wealth", 0)
@@ -1348,7 +1384,14 @@ def _render_treasure_check_result(
 
     found = result["found_treasure"]
 
-    if not show_roll:
+    # raw_roll is None for treasure that was never actually rolled
+    # for at all - either revisiting an old room (show_roll=False,
+    # handled the same way already) or treasure that's simply lying
+    # out in the open (a "Treasure Pile"/"Portcullis" etc. - see
+    # _room_has_guaranteed_treasure) and was never subject to a DC
+    # check in the first place. The latter always renders plainly,
+    # regardless of show_roll/freshness - there's no roll to frame.
+    if not show_roll or result.get("raw_roll") is None:
         if found:
             return (
                 f'{_render_quality_summary(found)}<br><br>'
