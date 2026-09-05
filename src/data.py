@@ -409,6 +409,16 @@ DETAIL_TRAITS = {
     # there in plain sight, not something that has to be found first.
     "Treasure Pile": {"guaranteed_treasure": True},
     "Portcullis": {"guaranteed_treasure": True},
+    # Each of these lets the party move between rooms that aren't
+    # directly connected in the normal Location Generator/Crawling
+    # Mode sense - "lift" and "secret_passage" each form one fixed
+    # pair between two specific rooms (set once, on first use);
+    # "fireplace" instead links every room that has this same detail,
+    # a network rather than a pair. See game.py's "use_lift" /
+    # "use_secret_passage" / "use_fireplace" actions.
+    "Lift": {"special_connection": "lift"},
+    "Secret Passage": {"special_connection": "secret_passage"},
+    "Fireplace": {"special_connection": "fireplace"},
 }
 
 # ----------------------------

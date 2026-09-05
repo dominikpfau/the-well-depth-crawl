@@ -456,3 +456,30 @@
         outline: 2px solid #6a9fd8;
         outline-offset: 2px;
     }
+
+    .dtree-badge {
+        /* left/top are set inline per-badge (canvas-absolute pixel
+           coordinates, computed alongside the room boxes and
+           connector lines) - not positioned relative to the room's
+           own box, since that box clips overflowing content and
+           would otherwise cut the badge off. */
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        font-size: 0.65rem;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 2px solid #1e1e1e;
+        z-index: 2;
+    }
+
+    .dtree-badge-clickable {
+        cursor: pointer;
+    }
+
+    .dtree-badge-clickable:hover {
+        filter: brightness(1.2);
+    }

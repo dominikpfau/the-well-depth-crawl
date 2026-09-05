@@ -111,6 +111,18 @@ async function toggleConnection(roomId) {
     return dispatch("toggle_connection", null, roomId);
 }
 
+async function useSecretPassage() {
+    const el = document.getElementById("secret-passage-select");
+    const roomId = el ? el.value : null;
+    return dispatch("use_secret_passage", null, roomId || null);
+}
+
+async function useFireplace() {
+    const el = document.getElementById("fireplace-select");
+    const roomId = el ? el.value : null;
+    return dispatch("use_fireplace", null, roomId || null);
+}
+
 function toggleSidebar() {
     // The toggle button now lives in the static page header (outside
     // #app), so it's clickable even before Pyodide has finished

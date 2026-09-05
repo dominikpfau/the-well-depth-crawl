@@ -463,6 +463,33 @@
         outline-offset: 2px;
     }
 
+    .dtree-badge {
+        /* left/top are set inline per-badge (canvas-absolute pixel
+           coordinates, computed alongside the room boxes and
+           connector lines) - not positioned relative to the room's
+           own box, since that box clips overflowing content and
+           would otherwise cut the badge off. */
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        font-size: 0.65rem;
+        font-weight: bold;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 2px solid #1e1e1e;
+        z-index: 2;
+    }
+
+    .dtree-badge-clickable {
+        cursor: pointer;
+    }
+
+    .dtree-badge-clickable:hover {
+        filter: brightness(1.2);
+    }
+
 </style>
 
 <!-- Pyodide runtime (loaded from CDN - this is the only "server" this app talks to) -->
@@ -911,6 +938,16 @@ DETAIL_TRAITS = {
     # there in plain sight, not something that has to be found first.
     "Treasure Pile": {"guaranteed_treasure": True},
     "Portcullis": {"guaranteed_treasure": True},
+    # Each of these lets the party move between rooms that aren't
+    # directly connected in the normal Location Generator/Crawling
+    # Mode sense - "lift" and "secret_passage" each form one fixed
+    # pair between two specific rooms (set once, on first use);
+    # "fireplace" instead links every room that has this same detail,
+    # a network rather than a pair. See game.py's "use_lift" /
+    # "use_secret_passage" / "use_fireplace" actions.
+    "Lift": {"special_connection": "lift"},
+    "Secret Passage": {"special_connection": "secret_passage"},
+    "Fireplace": {"special_connection": "fireplace"},
 }
 
 # ----------------------------
@@ -2532,6 +2569,141 @@ def _room_has_guaranteed_treasure(room) -> bool:
     return bool(loc_traits.get("guaranteed_treasure") or det_traits.get("guaranteed_treasure"))
 
 
+def _room_special_connection_kind(room):
+    """
+    "lift" / "secret_passage" / "fireplace" if this room's detail has
+    one of those special-movement traits (see DETAIL_TRAITS), else
+    None. Only details carry this trait for now - locations could in
+    principle too, but none currently do.
+    """
+    if room is None:
+        return None
+    return DETAIL_TRAITS.get(room["detail"], {}).get("special_connection")
+
+
+# (background, text) colors cycled across distinct Lift/Secret Passage
+# pairs - reused if there are more pairs than colors, since the L1/L2/
+# S1/S2 label (not the color) is what's actually relied on to tell
+# them apart; color is just a bonus visual match for the two ends of
+# the same pair. Deliberately avoids: the app's amber/gold accent
+# (#8a6716/#c99a2e - current room, path, primary actions), the
+# "viewed" outline's blue (#6a9fd8), and the warning red (#b71c1c) -
+# all already mean something else everywhere else in the app.
+_SPECIAL_CONNECTION_COLORS = [
+    ("#2a9d8f", "#ffffff"),  # teal
+    ("#e07a5f", "#ffffff"),  # coral
+    ("#9b6fb5", "#ffffff"),  # purple
+    ("#5aa469", "#ffffff"),  # green
+    ("#b56aa0", "#ffffff"),  # magenta
+    ("#5b7c99", "#ffffff"),  # slate blue
+]
+_FIREPLACE_BADGE_COLOR = ("#f4a261", "#3a2410")
+# A room with a Lift/Secret Passage/Fireplace detail that hasn't been
+# used yet at all - no pair/network exists to match colors with, so
+# this is deliberately neutral/muted rather than picking one of the
+# colors above (which would wrongly suggest it's already linked to
+# whatever else happens to have that same color).
+_UNCONNECTED_BADGE_COLOR = ("#3a3a3a", "#999999")
+
+
+def _compute_special_connection_badges(history):
+    """
+    {room_id: {"label", "bg", "fg", "partner_id"}} for every room
+    whose Location/Detail has a special-connection trait (Lift/Secret
+    Passage/Fireplace) - computed fresh on every render rather than
+    stored anywhere, since it's entirely derivable from
+    special_link_id / detail.
+
+    Shows a badge even before anything is actually connected yet -
+    same letter, same shape, just a neutral/muted color and no
+    partner to click through to (`partner_id: None`) - so the map
+    consistently flags "this room has one of these" everywhere, not
+    only once it's been used for the first time.
+
+    Once actually linked, Lift and Secret Passage (fixed pairs) each
+    get their own sequential label per kind ("L1", "L2", ... / "S1",
+    "S2", ...), numbered in order of the lower room id in the pair -
+    stable across renders without needing to store the number
+    anywhere. Colors, though, are assigned from a single sequence
+    shared across *both* kinds, in the order each pair was actually
+    established - not restarted per kind - so e.g. the first Lift
+    pair and the first Secret Passage pair (often created around a
+    similar time) don't both default to the same first color just
+    because each is "first" within its own kind. Fireplace never
+    gets a number: every room with that detail belongs to the one
+    single network the rules describe, so there's never more than
+    one to tell apart.
+    """
+    badges = {}
+
+    pairs_by_kind = {"lift": [], "secret_passage": []}
+    unconnected_by_kind = {"lift": [], "secret_passage": []}
+    seen_pairs = set()
+    for room in history:
+        kind = _room_special_connection_kind(room)
+        if kind not in pairs_by_kind:
+            continue
+        partner_id = room.get("special_link_id")
+        if partner_id is None:
+            unconnected_by_kind[kind].append(room["id"])
+            continue
+        pair = (min(room["id"], partner_id), max(room["id"], partner_id))
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+        pairs_by_kind[kind].append(pair)
+
+    letters = {"lift": "L", "secret_passage": "S"}
+    all_pairs = sorted(
+        ((kind, pair) for kind, pairs in pairs_by_kind.items() for pair in pairs),
+        key=lambda item: item[1],
+    )
+    kind_counts = {"lift": 0, "secret_passage": 0}
+    for color_index, (kind, (a, b)) in enumerate(all_pairs):
+        kind_counts[kind] += 1
+        bg, fg = _SPECIAL_CONNECTION_COLORS[color_index % len(_SPECIAL_CONNECTION_COLORS)]
+        label = f"{letters[kind]}{kind_counts[kind]}"
+        badges[a] = {"label": label, "bg": bg, "fg": fg, "partner_id": b}
+        badges[b] = {"label": label, "bg": bg, "fg": fg, "partner_id": a}
+
+    unc_bg, unc_fg = _UNCONNECTED_BADGE_COLOR
+    for kind, room_ids in unconnected_by_kind.items():
+        for room_id in room_ids:
+            badges[room_id] = {
+                "label": letters[kind], "bg": unc_bg, "fg": unc_fg, "partner_id": None,
+            }
+
+    fireplace_rooms = [r for r in history if r["detail"] == "Fireplace"]
+    if len(fireplace_rooms) >= 2:
+        bg, fg = _FIREPLACE_BADGE_COLOR
+        for room in fireplace_rooms:
+            # Just a quick "yes, this connects somewhere" preview -
+            # picks any other fireplace room to jump to. Reaching a
+            # *specific* one when there are several is still what the
+            # room card's own "Use Fireplace" dropdown is for.
+            other = next(r for r in fireplace_rooms if r["id"] != room["id"])
+            badges[room["id"]] = {"label": "F", "bg": bg, "fg": fg, "partner_id": other["id"]}
+    elif len(fireplace_rooms) == 1:
+        badges[fireplace_rooms[0]["id"]] = {
+            "label": "F", "bg": unc_bg, "fg": unc_fg, "partner_id": None,
+        }
+
+    return badges
+
+
+def _roll_special_link_depth(current_depth):
+    """
+    The depth rule Lift's own text spells out ("1d6 layers deeper, or
+    less deep if the current depth is greater than 5") - also reused
+    for Secret Passage's "new location" branch, which uses the exact
+    same rule (see DETAIL_TRAITS/handle_action's "use_secret_passage").
+    """
+    roll = roll_dice("1d6")
+    if current_depth > 5:
+        return max(0, current_depth - roll)
+    return current_depth + roll
+
+
 def _generate_room(
     used_depth, level, level_modifiers, roll_treasure, roll_encounter,
     treasure_dc, encounter_dc, forced_location=None, forced_detail=None,
@@ -2579,6 +2751,13 @@ def _generate_room(
         # a parent_id in the first place. See _is_adjacent_room() and
         # the "toggle_connection" action.
         "connection_blocked": False,
+        # The other room this one is specially linked to via a Lift
+        # or Secret Passage (see DETAIL_TRAITS/_room_special_connection_kind)
+        # - None until first used, then fixed for good. Fireplace
+        # needs no such field: which rooms it connects to is just
+        # "every other room with the same detail", worked out fresh
+        # each time from crawl_history rather than stored anywhere.
+        "special_link_id": None,
     }
 
     # --- Roll the treasure hidden in this location, right now. Shown
@@ -2656,6 +2835,41 @@ def _generate_room(
         }
 
     return room, treasure_dc, encounter_dc
+
+
+def _create_linked_room(
+    crawl_history, source_room, target_depth, level, level_modifiers,
+    treasure_dc, encounter_dc,
+):
+    """
+    Generates a brand new room at `target_depth`, forced to have the
+    same detail as `source_room` (a Lift/Secret Passage connects two
+    ends of the same mechanism - it should exist, and work, on both
+    sides, hence "symmetric"), and links it to `source_room` via
+    special_link_id on both, for instant travel between them from
+    then on regardless of where the party currently stands - the
+    shared "roll up a new location" mechanic behind both "use_lift"
+    and "use_secret_passage".
+
+    Deliberately gets no parent_id at all (unlike a normal
+    "go_deeper" room) - reaching it this way isn't "connected" in the
+    ordinary sense the Dungeon Map's tree/connecting lines represent,
+    so it starts as its own separate root there instead.
+
+    Mutates `crawl_history` (appends the new room) and `source_room`
+    (sets its special_link_id) in place. Returns
+    (new_room, treasure_dc, encounter_dc).
+    """
+    new_room, treasure_dc, encounter_dc = _generate_room(
+        target_depth, level, level_modifiers, True, True,
+        treasure_dc, encounter_dc, forced_detail=source_room["detail"],
+    )
+    new_room["id"] = len(crawl_history)
+    new_room["parent_id"] = None
+    new_room["special_link_id"] = source_room["id"]
+    crawl_history.append(new_room)
+    source_room["special_link_id"] = new_room["id"]
+    return new_room, treasure_dc, encounter_dc
 
 
 def handle_action(
@@ -2862,6 +3076,123 @@ def handle_action(
             target_room = _room_by_id(crawl_history, target_id)
             if target_room is not None and target_room["parent_id"] is not None:
                 target_room["connection_blocked"] = not target_room.get("connection_blocked")
+
+    elif action == "use_lift":
+        # Only usable while standing in a room with the "Lift" detail
+        # (see _room_special_connection_kind). First use rolls a
+        # destination and permanently links the two rooms together
+        # (_create_linked_room); every use after that just travels
+        # there directly - no new roll, since it's the same fixed
+        # shaft each time.
+        current_room = _room_by_id(crawl_history, crawl_current_id)
+        if current_room is not None and _room_special_connection_kind(current_room) == "lift":
+            if current_room.get("special_link_id") is not None:
+                target_room = _room_by_id(crawl_history, current_room["special_link_id"])
+            else:
+                target_depth = _roll_special_link_depth(current_room["used_depth"])
+                target_room, treasure_dc, encounter_dc = _create_linked_room(
+                    crawl_history, current_room, target_depth,
+                    level, level_modifiers, treasure_dc, encounter_dc,
+                )
+            if target_room is not None:
+                crawl_current_id = target_room["id"]
+                crawl_depth = target_room["used_depth"] + 1
+                crawl_viewed_id = None
+
+    elif action == "use_secret_passage":
+        # Only usable while standing in a room with the "Secret
+        # Passage" detail. First use decides, based on depth (mirrors
+        # "Lift"'s own rule): at depth <= 5, roll up a brand new,
+        # deeper room and link to it (_create_linked_room); beyond
+        # that, connect to an existing, less-deep room instead - if
+        # there's more than one candidate, `room_form` picks which
+        # (the room card shows a dropdown for that); with none at all
+        # (an edge case - normally something shallower always
+        # exists), falls back to rolling a new one anyway. Every use
+        # after the first just travels the now-fixed link directly.
+        current_room = _room_by_id(crawl_history, crawl_current_id)
+        if current_room is not None and _room_special_connection_kind(current_room) == "secret_passage":
+            target_room = None
+
+            if current_room.get("special_link_id") is not None:
+                target_room = _room_by_id(crawl_history, current_room["special_link_id"])
+
+            elif current_room["used_depth"] > 5:
+                candidates = [
+                    r for r in crawl_history
+                    if r["used_depth"] < current_room["used_depth"] and r["id"] != crawl_current_id
+                ]
+                if len(candidates) == 1:
+                    target_room = candidates[0]
+                elif len(candidates) > 1:
+                    chosen_id = _to_int_or_none(room_form)
+                    target_room = next((r for r in candidates if r["id"] == chosen_id), None)
+
+                if target_room is not None:
+                    current_room["special_link_id"] = target_room["id"]
+                    target_room["special_link_id"] = crawl_current_id
+                elif not candidates:
+                    target_depth = _roll_special_link_depth(current_room["used_depth"])
+                    target_room, treasure_dc, encounter_dc = _create_linked_room(
+                        crawl_history, current_room, target_depth,
+                        level, level_modifiers, treasure_dc, encounter_dc,
+                    )
+                # else: 2+ candidates but none chosen yet - the room
+                # card shows a dropdown; nothing happens until used.
+
+            else:
+                target_depth = _roll_special_link_depth(current_room["used_depth"])
+                target_room, treasure_dc, encounter_dc = _create_linked_room(
+                    crawl_history, current_room, target_depth,
+                    level, level_modifiers, treasure_dc, encounter_dc,
+                )
+
+            if target_room is not None:
+                crawl_current_id = target_room["id"]
+                crawl_depth = target_room["used_depth"] + 1
+                crawl_viewed_id = None
+
+    elif action == "use_fireplace":
+        # Only usable while standing in a room with the "Fireplace"
+        # detail. Unlike Lift/Secret Passage this is never a fixed
+        # pair - it's a standing network between every room that has
+        # this same detail, worked out fresh each time rather than
+        # stored on the rooms themselves. No candidates yet -> climb
+        # the chimney to a brand new fireplace room (which everyone
+        # else can then reach too); exactly one -> go straight there;
+        # more than one -> `room_form` picks which (the room card
+        # shows a dropdown for that).
+        current_room = _room_by_id(crawl_history, crawl_current_id)
+        if current_room is not None and _room_special_connection_kind(current_room) == "fireplace":
+            candidates = [
+                r for r in crawl_history
+                if r["detail"] == "Fireplace" and r["id"] != crawl_current_id
+            ]
+            target_room = None
+
+            if not candidates:
+                new_room, treasure_dc, encounter_dc = _generate_room(
+                    current_room["used_depth"] + 1, level, level_modifiers, True, True,
+                    treasure_dc, encounter_dc, forced_detail="Fireplace",
+                )
+                new_room["id"] = len(crawl_history)
+                # No parent_id, same reasoning as _create_linked_room:
+                # reached via the chimney, not a normal doorway - it
+                # starts its own root in the Dungeon Map rather than
+                # hanging off the room it was found from.
+                new_room["parent_id"] = None
+                crawl_history.append(new_room)
+                target_room = new_room
+            elif len(candidates) == 1:
+                target_room = candidates[0]
+            else:
+                chosen_id = _to_int_or_none(room_form)
+                target_room = next((r for r in candidates if r["id"] == chosen_id), None)
+
+            if target_room is not None:
+                crawl_current_id = target_room["id"]
+                crawl_depth = target_room["used_depth"] + 1
+                crawl_viewed_id = None
 
     elif action == "check_encounter":
         # A standalone risk check (e.g. searching around, listening at
@@ -3697,6 +4028,13 @@ def _build_visible_tree(room, children_map, path_ids):
             node["children"].append({
                 "room": None, "is_more": True,
                 "hidden_count": len(hidden), "children": [],
+                # Synthetic - a placeholder standing in for several
+                # hidden rooms (possibly at different actual depths)
+                # doesn't have one true used_depth of its own; one
+                # step below its parent is a reasonable default for
+                # layout purposes only, since it's never meant to be
+                # pixel-precise anyway.
+                "used_depth": room["used_depth"] + 1,
             })
 
     return node
@@ -3722,15 +4060,25 @@ def _compute_tree_x(node, slot_counter, x_cache):
     return x
 
 
-def _flatten_tree(node, depth, x_cache, parent_entry, out):
-    """Pre-order walk producing one flat entry per visible node, each
-    carrying its own (x, depth) and a reference to its parent's
-    entry (or None for the root) - everything _render_dungeon_map
-    needs to place a box and draw one line up to its parent."""
-    entry = {"node": node, "x": x_cache[id(node)], "depth": depth, "parent": parent_entry}
+def _flatten_tree(node, x_cache, parent_entry, out):
+    """
+    Pre-order walk producing one flat entry per visible node, each
+    carrying its own (x, used_depth) and a reference to its parent's
+    entry (or None for a root) - everything _render_dungeon_map needs
+    to place a box and draw one line up to its parent.
+
+    Y-position is based on the room's actual used_depth, not how many
+    tree-hops it is from the root - a normal "go_deeper" step is
+    always exactly 1 used_depth, so ordinary rooms look exactly as
+    before, but a Lift/Secret Passage landing several layers away
+    visibly stretches the gap instead of looking like just another
+    single step.
+    """
+    used_depth = node["room"]["used_depth"] if node["room"] else node["used_depth"]
+    entry = {"node": node, "x": x_cache[id(node)], "used_depth": used_depth, "parent": parent_entry}
     out.append(entry)
     for child in node["children"]:
-        _flatten_tree(child, depth + 1, x_cache, entry, out)
+        _flatten_tree(child, x_cache, entry, out)
     return out
 
 
@@ -3745,12 +4093,21 @@ def _render_dungeon_map(history, current_id, viewed_id=None):
     "view_room") gets its own marker too, so it's clear at a glance
     which box the card corresponds to.
 
-    Unlike an earlier version of this, every box's position is a
-    plain (column, row) pair computed in Python (_compute_tree_x /
-    _flatten_tree) and placed with an explicit pixel offset - deeper
-    rooms get a smaller pixel "row" so they end up higher on the
-    page. Connecting lines are drawn between those exact, known
-    coordinates via an SVG overlay. None of this depends on a
+    This can show more than one separate tree at once: a room reached
+    via Lift/Secret Passage/Fireplace has no parent_id at all (see
+    _create_linked_room), so it starts its own root rather than
+    hanging off the room it was reached from - it isn't "connected"
+    in the ordinary sense that deserves a connecting line.
+
+    Every box's position is a plain (column, used_depth) pair
+    computed in Python (_compute_tree_x / _flatten_tree) and placed
+    with an explicit pixel offset - deeper rooms get a smaller pixel
+    "row" so they end up higher on the page, and since this is based
+    on actual used_depth rather than how many tree-hops from the root
+    a room is, a big jump (e.g. a Lift landing 1d6 layers down)
+    visibly stretches that gap instead of looking like an ordinary
+    single step. Connecting lines are drawn between those exact,
+    known coordinates via an SVG overlay. None of this depends on a
     browser auto-centering nested boxes of differing width, which is
     what caused rooms to drift sideways in an earlier version.
     """
@@ -3763,28 +4120,101 @@ def _render_dungeon_map(history, current_id, viewed_id=None):
     if not roots:
         return ""
 
-    tree = _build_visible_tree(roots[0], children_map, path_ids)
-
+    # A Lift/Secret Passage/Fireplace landing isn't "connected in the
+    # classical sense" (see _create_linked_room) - it gets no
+    # parent_id at all, making it a root of its own. So there can be
+    # more than one root/tree here now; each gets its own x-slots
+    # (via the shared slot_counter, so they land side by side without
+    # overlapping columns) with a bit of breathing room between them -
+    # less than a full extra column's worth, which read as an
+    # oversized gap compared to the normal spacing within one tree.
     slot_counter = [0]
     x_cache = {}
-    _compute_tree_x(tree, slot_counter, x_cache)
-
-    flat = _flatten_tree(tree, 0, x_cache, None, [])
+    flat = []
+    for root in roots:
+        tree = _build_visible_tree(root, children_map, path_ids)
+        _compute_tree_x(tree, slot_counter, x_cache)
+        _flatten_tree(tree, x_cache, None, flat)
+        slot_counter[0] += 0.4
 
     max_x = max(e["x"] for e in flat)
-    max_depth = max(e["depth"] for e in flat)
+    max_used_depth = max(e["used_depth"] for e in flat)
+    min_used_depth = min(e["used_depth"] for e in flat)
 
     canvas_width = (max_x + 1) * _TREE_COL_WIDTH
-    canvas_height = (max_depth + 1) * _TREE_ROW_HEIGHT
+    canvas_height = (max_used_depth - min_used_depth + 1) * _TREE_ROW_HEIGHT
 
     def center(entry):
         cx = entry["x"] * _TREE_COL_WIDTH + _TREE_COL_WIDTH / 2
-        # deepest room (depth == max_depth) gets the smallest cy, so
-        # it ends up at the top of the canvas.
-        cy = (max_depth - entry["depth"]) * _TREE_ROW_HEIGHT + _TREE_ROW_HEIGHT / 2
+        # deepest used_depth gets the smallest cy, so it ends up at
+        # the top of the canvas - and since this is actual used_depth
+        # rather than a tree-hop count, a big jump (e.g. Lift landing
+        # 1d6 layers down) stretches this gap proportionally, instead
+        # of looking like an ordinary single step.
+        cy = (max_used_depth - entry["used_depth"]) * _TREE_ROW_HEIGHT + _TREE_ROW_HEIGHT / 2
         return cx, cy
 
+    special_badges = _compute_special_connection_badges(history)
+
+    # A subtle, straight dashed line directly between two rooms
+    # actually linked via Lift/Secret Passage/Fireplace - drawn first
+    # (so the normal tree connectors and room boxes paint over it
+    # wherever they'd otherwise overlap) and very muted, since it's a
+    # bonus visual cue on top of the badges, not the primary way to
+    # tell they're connected. Runs from badge center to badge center
+    # rather than room center to room center, so it's unambiguous
+    # which specific thing the line is about.
+    entry_by_room_id = {
+        entry["node"]["room"]["id"]: entry
+        for entry in flat
+        if not entry["node"]["is_more"]
+    }
+
+    def _badge_center(room_id):
+        entry = entry_by_room_id.get(room_id)
+        if entry is None:
+            return None  # hidden behind a "+more" right now
+        cx, cy = center(entry)
+        return cx + _TREE_NODE_WIDTH / 2, cy - _TREE_NODE_HEIGHT / 2
+
+    def _special_line(id_a, id_b):
+        a = _badge_center(id_a)
+        b = _badge_center(id_b)
+        if a is None or b is None:
+            return None
+        return (
+            f'<line x1="{a[0]:.1f}" y1="{a[1]:.1f}" x2="{b[0]:.1f}" y2="{b[1]:.1f}" '
+            f'stroke="#555" stroke-width="1.5" stroke-dasharray="4,4" opacity="0.4" />'
+        )
+
     lines = []
+    seen_special_pairs = set()
+    for room in history:
+        if _room_special_connection_kind(room) not in ("lift", "secret_passage"):
+            continue
+        partner_id = room.get("special_link_id")
+        if partner_id is None:
+            continue
+        pair_key = (min(room["id"], partner_id), max(room["id"], partner_id))
+        if pair_key in seen_special_pairs:
+            continue
+        seen_special_pairs.add(pair_key)
+        line = _special_line(room["id"], partner_id)
+        if line:
+            lines.append(line)
+
+    # Fireplace is a real network, not a fixed pair - every room with
+    # this detail connects to every other one, so every pair gets its
+    # own line. In practice these networks tend to stay small enough
+    # (a handful of rooms at most) that this doesn't turn into visual
+    # noise the way it might for a much larger network.
+    fireplace_rooms = [r for r in history if r["detail"] == "Fireplace"]
+    for i, room_a in enumerate(fireplace_rooms):
+        for room_b in fireplace_rooms[i + 1:]:
+            line = _special_line(room_a["id"], room_b["id"])
+            if line:
+                lines.append(line)
+
     for entry in flat:
         if entry["parent"] is None:
             continue
@@ -3829,6 +4259,7 @@ def _render_dungeon_map(history, current_id, viewed_id=None):
             )
 
     boxes = []
+    badges_html = []
     for entry in flat:
         cx, cy = center(entry)
         left = cx - _TREE_NODE_WIDTH / 2
@@ -3880,6 +4311,30 @@ def _render_dungeon_map(history, current_id, viewed_id=None):
             # the current room is, by default, also the viewed one).
             cls += " dtree-node-viewed"
 
+        badge = special_badges.get(room["id"])
+        if badge:
+            # Positioned on the canvas itself at the box's top-right
+            # corner, like the connector lines - not nested inside
+            # the room's own box, since that box clips overflowing
+            # content (for its text truncation) and would otherwise
+            # cut the badge off wherever it pokes past the edge.
+            badge_cx = cx + _TREE_NODE_WIDTH / 2
+            badge_cy = cy - _TREE_NODE_HEIGHT / 2
+            if badge["partner_id"] is not None:
+                badge_cls = "dtree-badge dtree-badge-clickable"
+                badge_attrs = f' onclick="viewRoom({badge["partner_id"]})"'
+                badge_title = f'Linked via {room["detail"]} - click to view'
+            else:
+                badge_cls = "dtree-badge"
+                badge_attrs = ""
+                badge_title = f'{room["detail"]} - not yet connected to anything'
+            badges_html.append(
+                f'<span class="{badge_cls}" '
+                f'style="left:{badge_cx - 10:.1f}px; top:{badge_cy - 10:.1f}px; '
+                f'background:{badge["bg"]}; color:{badge["fg"]};"{badge_attrs} '
+                f'title="{badge_title}">{badge["label"]}</span>'
+            )
+
         boxes.append(
             f'<div class="{cls}" style="{box_style}"{attrs}>'
             f'{room["location"]}<br><small>{room["detail"]}</small></div>'
@@ -3895,10 +4350,81 @@ def _render_dungeon_map(history, current_id, viewed_id=None):
                     {''.join(lines)}
                 </svg>
                 {''.join(boxes)}
+                {''.join(badges_html)}
             </div>
         </div>
     </div>
     """
+
+
+def _render_room_option_list(rooms):
+    """<option> tags for a "pick a destination room" dropdown - used
+    by Secret Passage's (2+ existing shallower rooms) and Fireplace's
+    (2+ existing fireplace rooms) destination pickers."""
+    return "".join(
+        f'<option value="{r["id"]}">{r["location"]} \u00b7 {r["detail"]} (Depth {r["used_depth"]})</option>'
+        for r in sorted(rooms, key=lambda r: r["id"])
+    )
+
+
+def _render_special_connection_controls(room, history):
+    """
+    "Use Lift" / "Use Secret Passage" / "Use Fireplace" - only ever
+    called for the room the party is actually standing in (see
+    _render_crawling_view). Secret Passage and Fireplace can both
+    need a destination picked from more than one candidate before
+    they can be used at all - in that case, a small inline dropdown
+    accompanies the button instead of it working on its own.
+    """
+    kind = _room_special_connection_kind(room)
+    if kind is None:
+        return ""
+
+    if kind == "lift":
+        return (
+            '<button type="button" class="go-here-button" '
+            'onclick="runAction(\'use_lift\')">Use Lift</button>'
+        )
+
+    if kind == "secret_passage":
+        # A destination choice is only ever needed the *first* time,
+        # and only once deep enough to reconnect to something
+        # shallower instead of rolling up a new room (see
+        # handle_action's "use_secret_passage").
+        if room.get("special_link_id") is None and room["used_depth"] > 5:
+            candidates = [
+                r for r in history
+                if r["used_depth"] < room["used_depth"] and r["id"] != room["id"]
+            ]
+            if len(candidates) > 1:
+                return (
+                    '<select id="secret-passage-select">'
+                    f'{_render_room_option_list(candidates)}'
+                    '</select>'
+                    '<button type="button" class="go-here-button" '
+                    'onclick="useSecretPassage()">Use Secret Passage</button>'
+                )
+        return (
+            '<button type="button" class="go-here-button" '
+            'onclick="runAction(\'use_secret_passage\')">Use Secret Passage</button>'
+        )
+
+    if kind == "fireplace":
+        candidates = [r for r in history if r["detail"] == "Fireplace" and r["id"] != room["id"]]
+        if len(candidates) > 1:
+            return (
+                '<select id="fireplace-select">'
+                f'{_render_room_option_list(candidates)}'
+                '</select>'
+                '<button type="button" class="go-here-button" '
+                'onclick="useFireplace()">Use Fireplace</button>'
+            )
+        return (
+            '<button type="button" class="go-here-button" '
+            'onclick="runAction(\'use_fireplace\')">Use Fireplace</button>'
+        )
+
+    return ""
 
 
 def _render_crawling_view():
@@ -3986,10 +4512,21 @@ def _render_crawling_view():
             f'onclick="toggleConnection({viewed_room["id"]})">{toggle_label}</button>'
         )
 
+    # Lift / Secret Passage / Fireplace - only usable while actually
+    # standing in the room (the backend action reads crawl_current_id,
+    # not whatever's merely being viewed), never while just looking at
+    # one via the Dungeon Map.
+    special_connection_html = ""
+    if is_current_position:
+        special_connection_html = _render_special_connection_controls(viewed_room, history)
+
     current_card = f"""
     <div class="section">
         <div class="crawl-history">
-            {_render_crawl_entry_full(viewed_room, is_current_position, is_fresh, go_here_html + toggle_connection_html)}
+            {_render_crawl_entry_full(
+                viewed_room, is_current_position, is_fresh,
+                go_here_html + toggle_connection_html + special_connection_html,
+            )}
         </div>
     </div>
     """
@@ -4186,6 +4723,18 @@ async function viewRoom(roomId) {
 
 async function toggleConnection(roomId) {
     return dispatch("toggle_connection", null, roomId);
+}
+
+async function useSecretPassage() {
+    const el = document.getElementById("secret-passage-select");
+    const roomId = el ? el.value : null;
+    return dispatch("use_secret_passage", null, roomId || null);
+}
+
+async function useFireplace() {
+    const el = document.getElementById("fireplace-select");
+    const roomId = el ? el.value : null;
+    return dispatch("use_fireplace", null, roomId || null);
 }
 
 function toggleSidebar() {
