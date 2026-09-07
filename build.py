@@ -112,7 +112,7 @@ def build() -> Path:
     )
 
     DIST.mkdir(exist_ok=True)
-    out_path = DIST / "depthcrawl_pyodide.html"
+    out_path = DIST / "index.html"
     out_path.write_text(index_html, encoding="utf-8")
     return out_path
 
