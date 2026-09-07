@@ -819,19 +819,41 @@ def _room_has_monster(room) -> bool:
 
 def _room_has_treasure(room) -> bool:
     """
-    True if this room's own treasure roll actually found something
-    *and* at least one item from it is still there - used for the
-    Dungeon Map's small treasure marker. Individually removing items
-    (see "remove_treasure_item") can empty item_list out entirely
-    without clearing found_treasure itself (the quality/roll info is
-    still meaningful history), so this checks item_list specifically
-    rather than just found_treasure's truthiness.
+    True if this room's own treasure roll actually found something,
+    at least one item from it is still there, *and* the room has
+    actually been searched - used for the Dungeon Map's real treasure
+    marker. A room's treasure is rolled for at generation time same
+    as ever, but stays hidden (see "ransacked") until "ransack_room"
+    reveals it - or, for a location/detail with DETAIL_TRAITS'/
+    LOCATION_TRAITS' "guaranteed_treasure" (lying out in the open,
+    e.g. "Treasure Pile"/"Portcullis"), it's marked ransacked from
+    the moment it's generated (see _generate_room) and this is true
+    right away. Individually removing items (see "remove_treasure_
+    item") can empty item_list out entirely without clearing
+    found_treasure itself (the quality/roll info is still meaningful
+    history), so this checks item_list specifically rather than just
+    found_treasure's truthiness.
     """
+    if not room.get("ransacked"):
+        return False
     result = room.get("treasure_result")
     if not result:
         return False
     found = result.get("found_treasure")
     return bool(found and found.get("item_list"))
+
+
+def _room_treasure_pending_search(room) -> bool:
+    """
+    True if this room has a treasure roll on record but hasn't been
+    ransacked yet - regardless of whether anything was actually
+    found, since that's exactly the point: showing a marker only
+    when treasure is actually there (even a distinct "nothing here"
+    non-marker) would let the Dungeon Map spoil the search before it
+    happens. Used for the Dungeon Map's grey "?" marker, which is
+    shown instead of (never alongside) the real treasure marker.
+    """
+    return bool(room.get("treasure_result")) and not room.get("ransacked")
 
 
 # Inline SVGs traced directly from Tabler Icons (MIT License,
@@ -1067,6 +1089,16 @@ def _generate_room(
         "detail": detail,
         "detail_text": DETAIL_DESCRIPTIONS.get(detail, "No description available."),
         "treasure_result": None,
+        # Whether this room's treasure (already rolled below, same as
+        # ever - see "treasure_result") has actually been revealed to
+        # the players yet. Starts False - the room card shows a
+        # "Ransack Room" button instead of the treasure section until
+        # "ransack_room" flips this - except for a location/detail
+        # with a "guaranteed_treasure" trait (lying out in the open,
+        # e.g. "Treasure Pile"/"Portcullis"), which sets this True
+        # further down instead, immediately: nothing to search for
+        # when it's just sitting there in view.
+        "ransacked": False,
         "entering_encounter": None,
         # Whether this room's own connection to its parent (in
         # Crawling Mode's room tree) is currently passable - only
@@ -1109,6 +1141,7 @@ def _generate_room(
             "found_treasure": generated,
             "blocked": False,
         }
+        room["ransacked"] = True
     elif roll_treasure:
         treasure_mods = collect_modifiers(room, trigger="ransack")
         treasure_mods["treasure_roll"] += level_modifiers.get("wealth", 0)
@@ -1408,6 +1441,25 @@ def handle_action(
             target_room = _room_by_id(crawl_history, target_id)
             if target_room is not None and target_room["parent_id"] is not None:
                 target_room["connection_blocked"] = not target_room.get("connection_blocked")
+
+    elif action == "ransack_room":
+        # Reveals whatever treasure was already rolled for this room
+        # at generation time (see _generate_room) - permanently, same
+        # "fixed once generated" idea as everything else about a
+        # room's own contents (see _room_has_monster's docstring).
+        # `room_form` identifies the room (validated against
+        # crawl_history the same way "toggle_connection"/"view_room"
+        # already do). A no-op for a room with no treasure_result at
+        # all (roll_treasure was off) or one that's guaranteed/already
+        # ransacked - the button that triggers this isn't even shown
+        # in either case (see _render_room_card), so reaching this
+        # branch for one of those would mean something odd already
+        # happened upstream, not a real user action to honor twice.
+        target_id = _to_int_or_none(room_form)
+        if target_id is not None:
+            target_room = _room_by_id(crawl_history, target_id)
+            if target_room is not None and target_room.get("treasure_result"):
+                target_room["ransacked"] = True
 
     elif action == "remove_monster_group":
         # Marks one monster group ("3x Goblin") as dealt with -
@@ -2165,11 +2217,31 @@ def _render_room_card(room, show_rolls=True, status_note="", status_extra_html="
 
     treasure_html = ""
     if room.get("treasure_result"):
-        treasure_html = f"""
-        <hr>
-        <strong>Treasure:</strong><br>
-        {_render_treasure_check_result(room["treasure_result"], show_roll=show_rolls, room_id=room_id, interactive=interactive)}
-        """
+        if interactive and not room.get("ransacked"):
+            # Lore: treasure sitting in a room isn't something the
+            # party can see just by knowing the room exists - it has
+            # to actually be searched for. What's under
+            # treasure_result was already rolled the moment this room
+            # was generated (same as ever - see _generate_room), it's
+            # just not shown until "ransack_room" reveals it, one way
+            # or the other (including "nothing here"). Only reachable
+            # here at all when interactive (Crawling Mode); the
+            # Location Generator's own room has no persistent state
+            # to search later, so its treasure (when rolled for at
+            # all) is still shown immediately, same as before.
+            treasure_html = f"""
+            <hr>
+            <strong>Treasure:</strong><br>
+            <button type="button" class="ransack-button" onclick="ransackRoom({room_id})">
+                Ransack Room
+            </button>
+            """
+        else:
+            treasure_html = f"""
+            <hr>
+            <strong>Treasure:</strong><br>
+            {_render_treasure_check_result(room["treasure_result"], show_roll=show_rolls, room_id=room_id, interactive=interactive)}
+            """
 
     return f"""
     <div class="room-title">{room['location']} <span class="room-title-sep">&middot;</span> {room['detail']}</div>
@@ -2833,21 +2905,39 @@ def _render_dungeon_map(history, current_id, viewed_id=None):
         # instead of drifting up into the box interior, where it
         # would sit closer to (and partially cover) the room's own
         # location/detail text.
+        #
+        # A room not yet ransacked gets a distinct, more subdued grey
+        # "?" here instead - same slot, same offset-when-a-monster's-
+        # -also-present logic, just never both at once: either the
+        # real treasure marker (searched) or the "?" (not searched
+        # yet), never neither-nor-both. Shown regardless of whether
+        # anything was actually rolled up for this room - a marker
+        # that only appeared for rooms that actually have treasure
+        # would spoil the search before it happens, same reasoning as
+        # _room_treasure_pending_search's docstring.
         has_monster = _room_has_monster(room)
         has_treasure = _room_has_treasure(room)
+        pending_search = _room_treasure_pending_search(room)
         anchor_cx = cx - _TREE_NODE_WIDTH / 2
         anchor_cy = cy + _TREE_NODE_HEIGHT / 2
 
-        if has_treasure:
+        if has_treasure or pending_search:
             if has_monster:
                 treasure_cx, treasure_cy = anchor_cx + 8, anchor_cy
             else:
                 treasure_cx, treasure_cy = anchor_cx, anchor_cy
-            badges_html.append(
-                f'<span class="dtree-badge dtree-badge-treasure" '
-                f'style="left:{treasure_cx - 10:.1f}px; top:{treasure_cy - 10:.1f}px; width:20px;" '
-                f'title="There\'s treasure here">{_ICON_TREASURE}</span>'
-            )
+            if has_treasure:
+                badges_html.append(
+                    f'<span class="dtree-badge dtree-badge-treasure" '
+                    f'style="left:{treasure_cx - 10:.1f}px; top:{treasure_cy - 10:.1f}px; width:20px;" '
+                    f'title="There\'s treasure here">{_ICON_TREASURE}</span>'
+                )
+            else:
+                badges_html.append(
+                    f'<span class="dtree-badge dtree-badge-treasure-unknown" '
+                    f'style="left:{treasure_cx - 10:.1f}px; top:{treasure_cy - 10:.1f}px; width:20px;" '
+                    f'title="This room has not been searched yet">?</span>'
+                )
 
         if has_monster:
             badges_html.append(

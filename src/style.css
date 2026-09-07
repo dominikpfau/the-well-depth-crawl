@@ -382,6 +382,15 @@
         border-color: #c99a2e;
     }
 
+    .ransack-button {
+        border-color: #8a6716;
+    }
+
+    .ransack-button:hover {
+        background: #3a2f1a;
+        border-color: #c99a2e;
+    }
+
     /* ------------------------
        Crawling Mode - Dungeon Map
        Every box's (left, top) pixel position and every connecting
@@ -535,4 +544,12 @@
     .dtree-badge-treasure {
         background: #c9b037;
         color: #3a3208;
+    }
+
+    /* Same neutral grey as an unconnected Lift/Secret Passage badge
+       (_UNCONNECTED_BADGE_COLOR) - same visual language, "known to
+       be here, not yet revealed what it actually is". */
+    .dtree-badge-treasure-unknown {
+        background: #3a3a3a;
+        color: #999999;
     }

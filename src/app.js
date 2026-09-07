@@ -112,6 +112,10 @@ async function toggleConnection(roomId) {
     return dispatch("toggle_connection", null, roomId);
 }
 
+async function ransackRoom(roomId) {
+    return dispatch("ransack_room", null, roomId);
+}
+
 async function removeMonsterGroup(roomId, groupId) {
     return dispatch("remove_monster_group", null, roomId, groupId);
 }
