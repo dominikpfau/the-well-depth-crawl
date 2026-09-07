@@ -464,22 +464,30 @@
     }
 
     .dtree-badge {
-        /* left/top are set inline per-badge (canvas-absolute pixel
-           coordinates, computed alongside the room boxes and
+        /* left/top/width are set inline per-badge (canvas-absolute
+           pixel coordinates, computed alongside the room boxes and
            connector lines) - not positioned relative to the room's
            own box, since that box clips overflowing content and
-           would otherwise cut the badge off. */
+           would otherwise cut the badge off. border-radius:10px
+           gives a perfect circle on a 20px-wide badge (icon only) or
+           a full pill/stadium shape on a wider one (icon + pairing
+           number) - same value works for both, since it's always
+           exactly half the fixed 20px height either way. */
         position: absolute;
-        width: 20px;
         height: 20px;
-        border-radius: 50%;
+        border-radius: 10px;
         font-size: 0.65rem;
         font-weight: bold;
         display: flex;
         align-items: center;
         justify-content: center;
+        gap: 2px;
         border: 2px solid #1e1e1e;
         z-index: 2;
+    }
+
+    .dtree-badge-number {
+        line-height: 1;
     }
 
     .dtree-badge-clickable {
@@ -488,6 +496,21 @@
 
     .dtree-badge-clickable:hover {
         filter: brightness(1.2);
+    }
+
+    /* Distinct from everything else already using color in the map:
+       the amber/gold accent (current room, path, primary actions),
+       the "viewed" outline's blue, the warning red (blocked-entrance
+       cross), and the whole Lift/Secret Passage/Fireplace badge
+       palette. */
+    .dtree-badge-monster {
+        background: #7a2e2e;
+        color: #f2caca;
+    }
+
+    .dtree-badge-treasure {
+        background: #c9b037;
+        color: #3a3208;
     }
 
 </style>
@@ -2581,6 +2604,97 @@ def _room_special_connection_kind(room):
     return DETAIL_TRAITS.get(room["detail"], {}).get("special_connection")
 
 
+def _room_has_monster(room) -> bool:
+    """
+    True if this room's entering encounter actually turned up a
+    monster group (not just an encounter check that happened but came
+    up "Safe") - used for the Dungeon Map's small monster marker.
+    Whatever was rolled when the room was generated is what this
+    reflects forever after - there's no way for a room's own contents
+    to change once it exists.
+    """
+    encounter = room.get("entering_encounter")
+    if not encounter or not encounter.get("success"):
+        return False
+    monsters = encounter.get("monsters")
+    return bool(monsters and monsters.get("groups"))
+
+
+def _room_has_treasure(room) -> bool:
+    """
+    True if this room's own treasure roll actually found something -
+    used for the Dungeon Map's small treasure marker. Same
+    "permanent once generated" logic as _room_has_monster.
+    """
+    result = room.get("treasure_result")
+    return bool(result and result.get("found_treasure"))
+
+
+# Inline SVGs traced directly from Tabler Icons (MIT License,
+# Copyright (c) 2020-2024 Paweł Kuna) - path data only, no font file,
+# so there's nothing to host or load at runtime. See
+# THIRD_PARTY_LICENSES.md for the full license text and which icon
+# each of these five came from (elevator/door/flame/skull/treasure-
+# chest, all from the "outline" style). Sized for a ~20px badge;
+# color comes from the badge's own inline `color` via `currentColor`,
+# so these automatically match whatever background/text pairing that
+# badge already uses.
+_ICON_LIFT = (
+    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" '
+    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+    'stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M5 5a1 1 0 0 1 1 -1h12a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1h-12a1 1 0 0 1 -1 -1l0 -14" />'
+    '<path d="M10 10l2 -2l2 2" />'
+    '<path d="M10 14l2 2l2 -2" />'
+    '</svg>'
+)
+_ICON_SECRET_PASSAGE = (
+    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" '
+    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+    'stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M14 12v.01" />'
+    '<path d="M3 21h18" />'
+    '<path d="M6 21v-16a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v16" />'
+    '</svg>'
+)
+_ICON_FIREPLACE = (
+    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" '
+    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+    'stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M12 10.941c2.333 -3.308 .167 -7.823 -1 -8.941c0 3.395 -2.235 5.299 -3.667 6.706'
+    'c-1.43 1.408 -2.333 3.294 -2.333 5.588c0 3.704 3.134 6.706 7 6.706c3.866 0 7 -3.002 7 -6.706'
+    'c0 -1.712 -1.232 -4.403 -2.333 -5.588c-2.084 3.353 -3.257 3.353 -4.667 2.235" />'
+    '</svg>'
+)
+_ICON_MONSTER = (
+    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" '
+    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+    'stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M12 4c4.418 0 8 3.358 8 7.5c0 1.901 -.755 3.637 -2 4.96l0 2.54a1 1 0 0 1 -1 1'
+    'h-10a1 1 0 0 1 -1 -1v-2.54c-1.245 -1.322 -2 -3.058 -2 -4.96c0 -4.142 3.582 -7.5 8 -7.5" />'
+    '<path d="M10 17v3" />'
+    '<path d="M14 17v3" />'
+    '<path d="M8 11a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />'
+    '<path d="M14 11a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />'
+    '</svg>'
+)
+_ICON_TREASURE = (
+    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" '
+    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+    'stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M4 19h16a1 1 0 0 0 1 -1v-9a4 4 0 0 0 -4 -4h-10a4 4 0 0 0 -4 4v9a1 1 0 0 0 1 1" />'
+    '<path d="M3 11h18" />'
+    '<path d="M16 5v14" />'
+    '<path d="M8 5v14" />'
+    '<path d="M12 11v2" />'
+    '</svg>'
+)
+_SPECIAL_CONNECTION_ICONS = {
+    "lift": _ICON_LIFT,
+    "secret_passage": _ICON_SECRET_PASSAGE,
+    "fireplace": _ICON_FIREPLACE,
+}
+
 # (background, text) colors cycled across distinct Lift/Secret Passage
 # pairs - reused if there are more pairs than colors, since the L1/L2/
 # S1/S2 label (not the color) is what's actually relied on to tell
@@ -2608,31 +2722,31 @@ _UNCONNECTED_BADGE_COLOR = ("#3a3a3a", "#999999")
 
 def _compute_special_connection_badges(history):
     """
-    {room_id: {"label", "bg", "fg", "partner_id"}} for every room
-    whose Location/Detail has a special-connection trait (Lift/Secret
-    Passage/Fireplace) - computed fresh on every render rather than
-    stored anywhere, since it's entirely derivable from
+    {room_id: {"icon", "number", "bg", "fg", "partner_id"}} for every
+    room whose Location/Detail has a special-connection trait
+    (Lift/Secret Passage/Fireplace) - computed fresh on every render
+    rather than stored anywhere, since it's entirely derivable from
     special_link_id / detail.
 
     Shows a badge even before anything is actually connected yet -
-    same letter, same shape, just a neutral/muted color and no
-    partner to click through to (`partner_id: None`) - so the map
-    consistently flags "this room has one of these" everywhere, not
-    only once it's been used for the first time.
+    same icon, same shape, just a neutral/muted color, no "number",
+    and no partner to click through to (`partner_id: None`) - so the
+    map consistently flags "this room has one of these" everywhere,
+    not only once it's been used for the first time.
 
     Once actually linked, Lift and Secret Passage (fixed pairs) each
-    get their own sequential label per kind ("L1", "L2", ... / "S1",
-    "S2", ...), numbered in order of the lower room id in the pair -
-    stable across renders without needing to store the number
-    anywhere. Colors, though, are assigned from a single sequence
-    shared across *both* kinds, in the order each pair was actually
-    established - not restarted per kind - so e.g. the first Lift
-    pair and the first Secret Passage pair (often created around a
-    similar time) don't both default to the same first color just
-    because each is "first" within its own kind. Fireplace never
-    gets a number: every room with that detail belongs to the one
-    single network the rules describe, so there's never more than
-    one to tell apart.
+    get their own sequential "number" per kind (1, 2, ...), assigned
+    in order of the lower room id in the pair - stable across renders
+    without needing to store it anywhere - shown next to the icon so
+    it's still clear which specific pair a badge belongs to. Colors,
+    though, are assigned from a single sequence shared across *both*
+    kinds, in the order each pair was actually established - not
+    restarted per kind - so e.g. the first Lift pair and the first
+    Secret Passage pair (often created around a similar time) don't
+    both default to the same first color just because each is
+    "first" within its own kind. Fireplace never gets a number: every
+    room with that detail belongs to the one single network the
+    rules describe, so there's never more than one to tell apart.
     """
     badges = {}
 
@@ -2653,7 +2767,6 @@ def _compute_special_connection_badges(history):
         seen_pairs.add(pair)
         pairs_by_kind[kind].append(pair)
 
-    letters = {"lift": "L", "secret_passage": "S"}
     all_pairs = sorted(
         ((kind, pair) for kind, pairs in pairs_by_kind.items() for pair in pairs),
         key=lambda item: item[1],
@@ -2662,15 +2775,17 @@ def _compute_special_connection_badges(history):
     for color_index, (kind, (a, b)) in enumerate(all_pairs):
         kind_counts[kind] += 1
         bg, fg = _SPECIAL_CONNECTION_COLORS[color_index % len(_SPECIAL_CONNECTION_COLORS)]
-        label = f"{letters[kind]}{kind_counts[kind]}"
-        badges[a] = {"label": label, "bg": bg, "fg": fg, "partner_id": b}
-        badges[b] = {"label": label, "bg": bg, "fg": fg, "partner_id": a}
+        icon = _SPECIAL_CONNECTION_ICONS[kind]
+        number = str(kind_counts[kind])
+        badges[a] = {"icon": icon, "number": number, "bg": bg, "fg": fg, "partner_id": b}
+        badges[b] = {"icon": icon, "number": number, "bg": bg, "fg": fg, "partner_id": a}
 
     unc_bg, unc_fg = _UNCONNECTED_BADGE_COLOR
     for kind, room_ids in unconnected_by_kind.items():
+        icon = _SPECIAL_CONNECTION_ICONS[kind]
         for room_id in room_ids:
             badges[room_id] = {
-                "label": letters[kind], "bg": unc_bg, "fg": unc_fg, "partner_id": None,
+                "icon": icon, "number": "", "bg": unc_bg, "fg": unc_fg, "partner_id": None,
             }
 
     fireplace_rooms = [r for r in history if r["detail"] == "Fireplace"]
@@ -2682,10 +2797,14 @@ def _compute_special_connection_badges(history):
             # *specific* one when there are several is still what the
             # room card's own "Use Fireplace" dropdown is for.
             other = next(r for r in fireplace_rooms if r["id"] != room["id"])
-            badges[room["id"]] = {"label": "F", "bg": bg, "fg": fg, "partner_id": other["id"]}
+            badges[room["id"]] = {
+                "icon": _ICON_FIREPLACE, "number": "", "bg": bg, "fg": fg,
+                "partner_id": other["id"],
+            }
     elif len(fireplace_rooms) == 1:
         badges[fireplace_rooms[0]["id"]] = {
-            "label": "F", "bg": unc_bg, "fg": unc_fg, "partner_id": None,
+            "icon": _ICON_FIREPLACE, "number": "", "bg": unc_bg, "fg": unc_fg,
+            "partner_id": None,
         }
 
     return badges
@@ -4328,11 +4447,73 @@ def _render_dungeon_map(history, current_id, viewed_id=None):
                 badge_cls = "dtree-badge"
                 badge_attrs = ""
                 badge_title = f'{room["detail"]} - not yet connected to anything'
+
+            if badge["number"]:
+                # Wide "pill" so the icon and its pairing number both
+                # fit - a plain circle would be too cramped for two
+                # things side by side.
+                badge_width = 28
+                badge_content = f'{badge["icon"]}<span class="dtree-badge-number">{badge["number"]}</span>'
+            else:
+                badge_width = 20
+                badge_content = badge["icon"]
+
             badges_html.append(
                 f'<span class="{badge_cls}" '
-                f'style="left:{badge_cx - 10:.1f}px; top:{badge_cy - 10:.1f}px; '
+                f'style="left:{badge_cx - badge_width / 2:.1f}px; top:{badge_cy - 10:.1f}px; '
+                f'width:{badge_width}px; '
                 f'background:{badge["bg"]}; color:{badge["fg"]};"{badge_attrs} '
-                f'title="{badge_title}">{badge["label"]}</span>'
+                f'title="{badge_title}">{badge_content}</span>'
+            )
+
+        # Monster/treasure markers share a single corner (bottom-left)
+        # instead of one each on bottom-left/top-left. Reason: with
+        # only two occupied corners total per box - top-right for the
+        # special-connection badge, bottom-left for these - adjacent
+        # rooms never have occupied corners facing each other, whether
+        # they're side-by-side siblings (left room's right edge meets
+        # right room's left edge: top-right vs top-left-which-is-now-
+        # empty, bottom-right-which-is-empty vs bottom-left) or
+        # parent/child stacked in the same column (bottom edge meets
+        # top edge: same logic). That's what actually caused the
+        # crowding this replaced - two badges sitting right on facing
+        # corners of neighboring boxes, closer together than the
+        # (deliberately tight, since dungeons can get large) gap
+        # between boxes. Moving both to one corner fixes that
+        # structurally instead of just shrinking badges or widening
+        # gaps.
+        #
+        # When a room has both, they overlap slightly rather than
+        # stacking cleanly above/below one another - monster in front
+        # (written last, so it paints on top at equal z-index),
+        # treasure peeking out behind it: you deal with the monster
+        # before you get to loot the room. The offset is horizontal
+        # only - purely sideways, not upward - so treasure stays at
+        # the same height as monster (the box's actual bottom edge)
+        # instead of drifting up into the box interior, where it
+        # would sit closer to (and partially cover) the room's own
+        # location/detail text.
+        has_monster = _room_has_monster(room)
+        has_treasure = _room_has_treasure(room)
+        anchor_cx = cx - _TREE_NODE_WIDTH / 2
+        anchor_cy = cy + _TREE_NODE_HEIGHT / 2
+
+        if has_treasure:
+            if has_monster:
+                treasure_cx, treasure_cy = anchor_cx + 8, anchor_cy
+            else:
+                treasure_cx, treasure_cy = anchor_cx, anchor_cy
+            badges_html.append(
+                f'<span class="dtree-badge dtree-badge-treasure" '
+                f'style="left:{treasure_cx - 10:.1f}px; top:{treasure_cy - 10:.1f}px; width:20px;" '
+                f'title="There\'s treasure here">{_ICON_TREASURE}</span>'
+            )
+
+        if has_monster:
+            badges_html.append(
+                f'<span class="dtree-badge dtree-badge-monster" '
+                f'style="left:{anchor_cx - 10:.1f}px; top:{anchor_cy - 10:.1f}px; width:20px;" '
+                f'title="There\'s a monster here">{_ICON_MONSTER}</span>'
             )
 
         boxes.append(

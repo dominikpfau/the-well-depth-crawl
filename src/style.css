@@ -458,22 +458,30 @@
     }
 
     .dtree-badge {
-        /* left/top are set inline per-badge (canvas-absolute pixel
-           coordinates, computed alongside the room boxes and
+        /* left/top/width are set inline per-badge (canvas-absolute
+           pixel coordinates, computed alongside the room boxes and
            connector lines) - not positioned relative to the room's
            own box, since that box clips overflowing content and
-           would otherwise cut the badge off. */
+           would otherwise cut the badge off. border-radius:10px
+           gives a perfect circle on a 20px-wide badge (icon only) or
+           a full pill/stadium shape on a wider one (icon + pairing
+           number) - same value works for both, since it's always
+           exactly half the fixed 20px height either way. */
         position: absolute;
-        width: 20px;
         height: 20px;
-        border-radius: 50%;
+        border-radius: 10px;
         font-size: 0.65rem;
         font-weight: bold;
         display: flex;
         align-items: center;
         justify-content: center;
+        gap: 2px;
         border: 2px solid #1e1e1e;
         z-index: 2;
+    }
+
+    .dtree-badge-number {
+        line-height: 1;
     }
 
     .dtree-badge-clickable {
@@ -482,4 +490,19 @@
 
     .dtree-badge-clickable:hover {
         filter: brightness(1.2);
+    }
+
+    /* Distinct from everything else already using color in the map:
+       the amber/gold accent (current room, path, primary actions),
+       the "viewed" outline's blue, the warning red (blocked-entrance
+       cross), and the whole Lift/Secret Passage/Fireplace badge
+       palette. */
+    .dtree-badge-monster {
+        background: #7a2e2e;
+        color: #f2caca;
+    }
+
+    .dtree-badge-treasure {
+        background: #c9b037;
+        color: #3a3208;
     }
