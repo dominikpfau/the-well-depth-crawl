@@ -141,15 +141,22 @@ def generate_treasure(quality_mod=0, dungeon_level=1, forced_quality=None):
 
     count, quality = TREASURE_QUALITY_TABLE[quality_roll]
 
-    # base treasure items
+    # base treasure items. Each gets a stable "id" (just its position
+    # at creation time, never reassigned or reused) so a specific
+    # item can be individually removed later - e.g. "N Silver Bars"
+    # marked as collected - without the fragile assumption that its
+    # position in the list won't have shifted by then (it will, once
+    # any earlier item has already been removed).
     item_list = [
-        TREASURE_TABLES[quality][random.randint(1, 20)]
-        for _ in range(count)
+        {"id": i, "text": TREASURE_TABLES[quality][random.randint(1, 20)]}
+        for i in range(count)
     ]
 
     # --- ADD EXTRA ITEMS (paint, consumables, artifacts, ...) ---
     extra_items = generate_extra_items(quality_roll, dungeon_level)
-    item_list.extend(extra_items)
+    item_list.extend(
+        {"id": count + i, "text": text} for i, text in enumerate(extra_items)
+    )
 
     return {
         "quality_roll": quality_roll,
@@ -427,6 +434,7 @@ def roll_encounter_group(level: int, forced_monster: str = None) -> dict:
     if forced_monster:
         count, breakdown = roll_monster_count_detailed(MONSTERS[forced_monster], level)
         groups = [{
+            "id": 0,
             "rolled_on_level": level,
             "dice": None,
             "row": None,
@@ -439,6 +447,14 @@ def roll_encounter_group(level: int, forced_monster: str = None) -> dict:
         return {"requested_level": level, "groups": groups}
 
     groups = _roll_encounter_groups_at(level, _RollBudget(_MAX_ENCOUNTER_SUBROLLS))
+    # Ids are assigned here, once the final (possibly ROLL_TWICE-
+    # flattened) list is known - each group's "id" is just its
+    # position in that final list, never reassigned or reused, so a
+    # specific group ("3x Goblin") stays individually identifiable
+    # even after some other group in the same encounter has already
+    # been removed (see "remove_monster_group").
+    for i, group in enumerate(groups):
+        group["id"] = i
     return {"requested_level": level, "groups": groups}
 
 
@@ -803,12 +819,19 @@ def _room_has_monster(room) -> bool:
 
 def _room_has_treasure(room) -> bool:
     """
-    True if this room's own treasure roll actually found something -
-    used for the Dungeon Map's small treasure marker. Same
-    "permanent once generated" logic as _room_has_monster.
+    True if this room's own treasure roll actually found something
+    *and* at least one item from it is still there - used for the
+    Dungeon Map's small treasure marker. Individually removing items
+    (see "remove_treasure_item") can empty item_list out entirely
+    without clearing found_treasure itself (the quality/roll info is
+    still meaningful history), so this checks item_list specifically
+    rather than just found_treasure's truthiness.
     """
     result = room.get("treasure_result")
-    return bool(result and result.get("found_treasure"))
+    if not result:
+        return False
+    found = result.get("found_treasure")
+    return bool(found and found.get("item_list"))
 
 
 # Inline SVGs traced directly from Tabler Icons (MIT License,
@@ -1187,6 +1210,7 @@ def handle_action(
     monster_form=None,
     quality_form=None,
     room_form=None,
+    entry_form=None,
 ):
     """
     Mirrors the POST branch of the original Flask route.
@@ -1233,7 +1257,15 @@ def handle_action(
     `room_form` is Crawling Mode's "Enter Room" dropdown - the id of
     an already-visited, deeper room to step into (only used by
     "enter_room"; not a standing preference, so it's read fresh from
-    the form each time rather than persisted in SESSION).
+    the form each time rather than persisted in SESSION). It's also
+    reused, the same way "toggle_connection"/"view_room" already do,
+    to identify *which* room's data to mutate for "remove_monster_
+    group" and "remove_treasure_item".
+
+    `entry_form` is only used by those same two actions - the stable
+    id (assigned once, at generation time, in roll_encounter_group /
+    generate_treasure - never reused) of the specific monster group
+    or treasure item within that room to remove for good.
     """
     global SESSION
 
@@ -1376,6 +1408,51 @@ def handle_action(
             target_room = _room_by_id(crawl_history, target_id)
             if target_room is not None and target_room["parent_id"] is not None:
                 target_room["connection_blocked"] = not target_room.get("connection_blocked")
+
+    elif action == "remove_monster_group":
+        # Marks one monster group ("3x Goblin") as dealt with -
+        # removed from the room's entering encounter for good, not
+        # just hidden in the UI. `room_form` identifies the room
+        # (validated against crawl_history the same way "toggle_
+        # connection"/"view_room" already do - normally the room
+        # currently being viewed, but re-validated rather than
+        # trusted outright); `entry_form` the specific group's stable
+        # id. Once every group here has been removed, _room_has_
+        # monster() naturally stops reporting a monster present (its
+        # "groups" check is already just a truthiness check on the
+        # now-empty list) - nothing extra needed for the Dungeon
+        # Map's marker to update itself.
+        target_id = _to_int_or_none(room_form)
+        group_id = _to_int_or_none(entry_form)
+        if target_id is not None and group_id is not None:
+            target_room = _room_by_id(crawl_history, target_id)
+            encounter = target_room.get("entering_encounter") if target_room else None
+            monsters = encounter.get("monsters") if encounter else None
+            if monsters and monsters.get("groups"):
+                monsters["groups"] = [
+                    g for g in monsters["groups"] if g["id"] != group_id
+                ]
+
+    elif action == "remove_treasure_item":
+        # Same idea for a single treasure item ("N Silver Bars") -
+        # removed once it's been collected. `entry_form` is the
+        # item's stable id (assigned in generate_treasure()).
+        # found_treasure itself is deliberately left in place even
+        # once item_list is fully emptied (its quality/roll info is
+        # still meaningful history) - see _room_has_treasure and
+        # _render_treasure_check_result for how an emptied-but-
+        # present found_treasure is told apart from "nothing was
+        # ever found here".
+        target_id = _to_int_or_none(room_form)
+        item_id = _to_int_or_none(entry_form)
+        if target_id is not None and item_id is not None:
+            target_room = _room_by_id(crawl_history, target_id)
+            result = target_room.get("treasure_result") if target_room else None
+            found = result.get("found_treasure") if result else None
+            if found and found.get("item_list"):
+                found["item_list"] = [
+                    it for it in found["item_list"] if it["id"] != item_id
+                ]
 
     elif action == "use_lift":
         # Only usable while standing in a room with the "Lift" detail
@@ -1709,8 +1786,28 @@ def _render_meta_badges(level_modifiers):
     return "".join(parts)
 
 
-def _render_item_list(item_list):
-    return "".join(f"\u2022 {item}<br>" for item in item_list)
+def _render_item_list(item_list, room_id=None, interactive=False):
+    """
+    `interactive=True` (only ever passed from Crawling Mode's own
+    room card - see _render_room_card) adds a subtle "x" next to each
+    item that removes just that one item, permanently, via
+    "remove_treasure_item" - for marking it as collected. `room_id`
+    identifies which room to mutate; every other caller (Location/
+    Encounter/Treasure Generator - none of which have a persistent,
+    revisitable room to mutate) leaves both at their defaults and
+    gets the old, plain, non-interactive list.
+    """
+    lines = []
+    for item in item_list:
+        remove_btn = ""
+        if interactive and room_id is not None:
+            remove_btn = (
+                f' <span class="entry-remove-btn" '
+                f'onclick="removeTreasureItem({room_id}, {item["id"]})" '
+                f'title="Mark as collected" role="button" tabindex="0">&times;</span>'
+            )
+        lines.append(f"\u2022 {item['text']}{remove_btn}<br>")
+    return "".join(lines)
 
 
 def _pluralize(count, singular, plural=None):
@@ -1767,12 +1864,20 @@ def _render_quality_roll_line(treasure):
 
 def _render_treasure_check_result(
     result, fail_message="There doesn't seem to be anything of value here.",
-    show_roll=True,
+    show_roll=True, room_id=None, interactive=False,
 ):
     if result.get("blocked"):
         return "<em>No treasure can be found here.</em>"
 
     found = result["found_treasure"]
+
+    # Once every individual item has been removed ("collected") via
+    # "remove_treasure_item", found_treasure itself is still there
+    # (its quality/roll info is still meaningful history) but
+    # item_list is now empty - render that as "already collected"
+    # rather than the quality summary claiming "0 items".
+    if found and not found["item_list"]:
+        return "<em>Everything of value here has already been collected.</em>"
 
     # raw_roll is None for treasure that was never actually rolled
     # for at all - either revisiting an old room (show_roll=False,
@@ -1785,7 +1890,7 @@ def _render_treasure_check_result(
         if found:
             return (
                 f'{_render_quality_summary(found)}<br><br>'
-                f'{_render_item_list(found["item_list"])}'
+                f'{_render_item_list(found["item_list"], room_id=room_id, interactive=interactive)}'
             )
         return f"<em>{fail_message}</em>"
 
@@ -1804,7 +1909,7 @@ def _render_treasure_check_result(
     if found:
         html += (
             f'{_render_quality_roll_line(found)}<br><br>'
-            f'{_render_item_list(found["item_list"])}'
+            f'{_render_item_list(found["item_list"], room_id=room_id, interactive=interactive)}'
         )
     else:
         html += f"<em>{fail_message}</em>"
@@ -1812,18 +1917,35 @@ def _render_treasure_check_result(
     return html
 
 
-def _render_monster_lines(monsters, show_rolls=True):
+def _render_monster_lines(monsters, show_rolls=True, room_id=None, interactive=False):
     """Renders the "N× Monster (breakdown)" lines for an encounter's
     monster groups. Assumes `monsters` is not None and has groups.
 
     `show_rolls=False` drops the count-breakdown formula and cascade
     note, leaving just "N× Monster" - used when revisiting an older
-    Crawling Mode room."""
+    Crawling Mode room.
+
+    `interactive=True` (only ever passed from Crawling Mode's own
+    room card) adds a subtle "x" next to each group that removes just
+    that one group, permanently, via "remove_monster_group" - for
+    marking it as defeated. `room_id` identifies which room to
+    mutate; every other caller (Encounter Generator, a location's own
+    entering encounter shown from the Location Generator) leaves both
+    at their defaults and gets the old, plain, non-interactive lines.
+    """
     requested_level = monsters["requested_level"]
     lines = []
     for group in monsters["groups"]:
+        remove_btn = ""
+        if interactive and room_id is not None:
+            remove_btn = (
+                f' <span class="entry-remove-btn" '
+                f'onclick="removeMonsterGroup({room_id}, {group["id"]})" '
+                f'title="Mark as defeated" role="button" tabindex="0">&times;</span>'
+            )
+
         if not show_rolls:
-            lines.append(f'<span class="recent-roll">{group["count"]}&times; {group["monster"]}</span>')
+            lines.append(f'<span class="recent-roll">{group["count"]}&times; {group["monster"]}</span>{remove_btn}')
             continue
 
         cascade_note = ""
@@ -1839,13 +1961,13 @@ def _render_monster_lines(monsters, show_rolls=True):
 
         lines.append(
             f'<span class="recent-roll">{group["count"]}&times; {group["monster"]}</span>'
-            f"{count_note}{cascade_note}"
+            f"{count_note}{cascade_note}{remove_btn}"
         )
 
     return "<br>".join(lines)
 
 
-def _render_encounter_treasure(result, show_rolls=True):
+def _render_encounter_treasure(result, show_rolls=True, room_id=None, interactive=False):
     """`result` is a roll_monster_treasure()-shaped dict, or None if
     every monster present is one that never carries treasure."""
     if result is None:
@@ -1857,11 +1979,11 @@ def _render_encounter_treasure(result, show_rolls=True):
     return f"""
     <hr>
     <strong>Treasure:</strong><br>
-    {_render_treasure_check_result(result, show_roll=show_rolls)}
+    {_render_treasure_check_result(result, show_roll=show_rolls, room_id=room_id, interactive=interactive)}
     """
 
 
-def _render_encounter_result(result, show_treasure=True, show_rolls=True):
+def _render_encounter_result(result, show_treasure=True, show_rolls=True, room_id=None, interactive=False):
     """
     Renders one encounter-check result - shared between a location's
     own "entering encounter" and the standalone Encounter Generator
@@ -1884,12 +2006,29 @@ def _render_encounter_result(result, show_treasure=True, show_rolls=True):
     the "Rolled ... vs DC ..." framing entirely too, since no check
     actually happened there - mirrors how the Treasure Generator's
     unconditional "Generate Treasure" skips DC framing too.
+
+    `room_id`/`interactive` are only ever passed from Crawling Mode's
+    own room card (see _render_room_card) - forwarded down into
+    _render_monster_lines/_render_encounter_treasure so each monster
+    group there gets its own "mark as defeated" control. A group list
+    that's present but now empty (every group in it already removed)
+    gets its own distinct message rather than being folded into the
+    genuine "no encounter happened here" case.
     """
+    groups_now_empty = (
+        result["success"] and result["monsters"] is not None
+        and not result["monsters"]["groups"]
+    )
+
     if not show_rolls or result.get("mode") == "generated":
         if result["success"] and result["monsters"] and result["monsters"]["groups"]:
-            body = _render_monster_lines(result["monsters"], show_rolls=show_rolls)
+            body = _render_monster_lines(
+                result["monsters"], show_rolls=show_rolls, room_id=room_id, interactive=interactive
+            )
             treasure_html = (
-                _render_encounter_treasure(result["treasure"], show_rolls=show_rolls)
+                _render_encounter_treasure(
+                    result["treasure"], show_rolls=show_rolls, room_id=room_id, interactive=interactive
+                )
                 if show_treasure else ""
             )
         elif result.get("mode") == "generated":
@@ -1897,6 +2036,9 @@ def _render_encounter_result(result, show_treasure=True, show_rolls=True):
             # group - this branch shouldn't normally be reachable for
             # it, but render *something* sensible if it ever is.
             body = "<em>Nothing generated.</em>"
+            treasure_html = ""
+        elif groups_now_empty:
+            body = "<em>All monsters here have already been dealt with.</em>"
             treasure_html = ""
         else:
             body = "<em>No encounter.</em>"
@@ -1910,8 +2052,14 @@ def _render_encounter_result(result, show_treasure=True, show_rolls=True):
     )
 
     if result["success"] and result["monsters"] and result["monsters"]["groups"]:
-        body = _render_monster_lines(result["monsters"])
-        treasure_html = _render_encounter_treasure(result["treasure"]) if show_treasure else ""
+        body = _render_monster_lines(result["monsters"], room_id=room_id, interactive=interactive)
+        treasure_html = (
+            _render_encounter_treasure(result["treasure"], room_id=room_id, interactive=interactive)
+            if show_treasure else ""
+        )
+    elif groups_now_empty:
+        body = "<em>All monsters here have already been dealt with.</em>"
+        treasure_html = ""
     else:
         body = "<em>No encounter.</em>"
         treasure_html = ""
@@ -1962,7 +2110,7 @@ def _render_room_roll_badge(label, roll, depth, show_rolls):
     return f'<span class="meta-badge">{label} rolled {format_roll(raw, depth)} = {roll}</span>'
 
 
-def _render_room_card(room, show_rolls=True, status_note="", status_extra_html=""):
+def _render_room_card(room, show_rolls=True, status_note="", status_extra_html="", room_id=None):
     """
     Renders a room's Location/Detail title, how it was determined,
     both descriptions, and (if present) its Encounter/Treasure
@@ -1983,7 +2131,18 @@ def _render_room_card(room, show_rolls=True, status_note="", status_extra_html="
     after it - used for the small "Go Here" button that shows up next
     to "Viewing only" when that room happens to be a direct neighbor
     of wherever the party actually is.
+
+    `room_id`, if given (only ever passed from Crawling Mode - see
+    _render_crawl_entry_full), is this room's stable id in
+    crawl_history and switches the Encounter/Treasure sections into
+    "interactive" mode: each monster group / treasure item gets its
+    own small "x" to permanently remove it (defeated / collected).
+    The Location Generator's own room never gets one - its contents
+    aren't part of any persistent, revisitable dungeon, so there's
+    nothing meaningful to mutate.
     """
+    interactive = room_id is not None
+
     loc_badge = _render_room_roll_badge("Location", room["location_roll"], room["used_depth"], show_rolls)
     det_badge = _render_room_roll_badge("Detail", room["detail_roll"], room["used_depth"], show_rolls)
 
@@ -2001,7 +2160,7 @@ def _render_room_card(room, show_rolls=True, status_note="", status_extra_html="
         entering_html = f"""
         <hr>
         <strong>Encounter:</strong><br>
-        {_render_encounter_result(room["entering_encounter"], show_treasure=False, show_rolls=show_rolls)}
+        {_render_encounter_result(room["entering_encounter"], show_treasure=False, show_rolls=show_rolls, room_id=room_id, interactive=interactive)}
         """
 
     treasure_html = ""
@@ -2009,7 +2168,7 @@ def _render_room_card(room, show_rolls=True, status_note="", status_extra_html="
         treasure_html = f"""
         <hr>
         <strong>Treasure:</strong><br>
-        {_render_treasure_check_result(room["treasure_result"], show_roll=show_rolls)}
+        {_render_treasure_check_result(room["treasure_result"], show_roll=show_rolls, room_id=room_id, interactive=interactive)}
         """
 
     return f"""
@@ -2214,7 +2373,7 @@ def _render_crawl_entry_full(room, is_current_position, is_fresh, extra_buttons_
 
     return f"""
     <div class="{card_class}">
-        {_render_room_card(room, show_rolls=show_rolls, status_note=status_note, status_extra_html=extra_buttons_html)}
+        {_render_room_card(room, show_rolls=show_rolls, status_note=status_note, status_extra_html=extra_buttons_html, room_id=room["id"])}
     </div>
     """
 

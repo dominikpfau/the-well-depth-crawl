@@ -193,6 +193,36 @@
     }
 
     /* ------------------------
+       Entry Remove Button
+       ------------------------ */
+    /* The small "x" next to a monster group / treasure item in
+       Crawling Mode's room card (see game.py's _render_monster_lines
+       / _render_item_list, "interactive" mode) - deliberately subtle
+       at rest (a muted "x", no border/background) so it doesn't
+       compete with the actual roll/item text next to it, but clearly
+       actionable on hover/focus (same red as the map's blocked-
+       connection cross and the "Safe"/warning badges, so it reads as
+       "remove" rather than picking up some new, unrelated meaning). */
+    .entry-remove-btn {
+        display: inline-block;
+        margin-left: 0.35rem;
+        padding: 0 0.35rem;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        line-height: 1.5;
+        color: #777;
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .entry-remove-btn:hover,
+    .entry-remove-btn:focus {
+        background: #b71c1c;
+        color: #ffecec;
+        outline: none;
+    }
+
+    /* ------------------------
        Recent Roll Highlight
        ------------------------ */
     .recent-roll {

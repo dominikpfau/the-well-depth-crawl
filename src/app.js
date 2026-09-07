@@ -63,7 +63,7 @@ function renderApp() {
     document.getElementById("app").innerHTML = html;
 }
 
-async function dispatch(action, view, roomId) {
+async function dispatch(action, view, roomId, entryId) {
     try {
         pyGame.handle_action(
             action,
@@ -79,7 +79,8 @@ async function dispatch(action, view, roomId) {
             getSelectField("detail-select"),
             getSelectField("monster-select"),
             getSelectField("quality-select"),
-            roomId == null ? null : String(roomId)
+            roomId == null ? null : String(roomId),
+            entryId == null ? null : String(entryId)
         );
         renderApp();
     } catch (err) {
@@ -109,6 +110,14 @@ async function viewRoom(roomId) {
 
 async function toggleConnection(roomId) {
     return dispatch("toggle_connection", null, roomId);
+}
+
+async function removeMonsterGroup(roomId, groupId) {
+    return dispatch("remove_monster_group", null, roomId, groupId);
+}
+
+async function removeTreasureItem(roomId, itemId) {
+    return dispatch("remove_treasure_item", null, roomId, itemId);
 }
 
 async function useSecretPassage() {
