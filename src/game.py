@@ -729,6 +729,34 @@ def format_roll(raw, mod):
     return f"{raw} {sign} {abs(mod)}"
 
 
+def _format_roll_total(raw, mod, total=None):
+    """
+    format_roll(), plus the resulting total - "3 + 1 = 4" - unless
+    there's nothing to add (mod is 0/None), in which case the total
+    would just repeat the same number ("3 = 3") and is dropped, same
+    as roll_monster_count_detailed's own "only show '= total' when
+    there's actually a distinct computation" rule. The single shared
+    piece behind every "X roll: ..." display in the UI (see
+    _render_room_roll_badge/_render_quality_roll_line/
+    _render_treasure_check_result/_render_encounter_result) - kept
+    here as one function specifically so those can't drift back out
+    of sync with each other the way they had before.
+
+    `total`, if given, overrides the displayed total instead of
+    computing raw+mod directly - needed for a quality roll, whose
+    real total is clamped to 0..12 (see generate_treasure) and so
+    can differ from the raw arithmetic sum for a large enough mod.
+    """
+    rendered = format_roll(raw, mod)
+    if raw is None:
+        return rendered
+    if total is None:
+        total = raw + (mod or 0)
+    if rendered == str(total):
+        return rendered
+    return f"{rendered} = {total}"
+
+
 def format_modifier(mod):
     sign = "+" if mod is None or mod >= 0 else "\u2212"
     return f"{sign}{abs(mod)}"
@@ -1363,7 +1391,7 @@ def _generate_room(
             # treasure_dc, since no check actually happened. raw_roll
             # stays None, which is what tells
             # _render_treasure_check_result to always render this
-            # plainly - no "Rolled ... vs DC ..." framing, ever -
+            # plainly - no "Search roll: ... vs DC ..." framing, ever -
             # instead of only when revisiting (see its show_roll
             # handling). This is independent of (and doesn't skip)
             # the normal hidden-treasure search roll right below - a
@@ -2384,10 +2412,12 @@ def _render_quality_summary(treasure):
 def _render_quality_roll_line(treasure):
     """
     Quality tier and item count both fall out of one roll, indexed
-    into TREASURE_QUALITY_TABLE (see generate_treasure()). Labeled
-    "Quality roll" rather than "Rolled" - this line sits right below
-    a check that's *also* labeled "Rolled ... vs DC ...", and having
-    two lines both start with "Rolled" read oddly stacked together.
+    into TREASURE_QUALITY_TABLE (see generate_treasure()). Same
+    "{label} roll: ... \u2192 outcome" template every other roll
+    display in the UI uses (see _format_roll_total) - "Quality roll:"
+    rather than the more generic "Rolled ..." specifically so it
+    reads as its own distinct roll when it's sitting right below a
+    Search/Encounter roll's own line, not a repeat of it.
 
     Base items (from the quality tier's own table) and extra treasure
     (paint, consumables, artifacts, ... from generate_extra_items())
@@ -2400,17 +2430,18 @@ def _render_quality_roll_line(treasure):
 
     if treasure["raw_quality_roll"] is None:
         # Quality tier was chosen directly (Treasure Generator's
-        # dropdown), not rolled - nothing to show as "Rolled ...".
+        # dropdown), not rolled - nothing to show as "Quality roll:".
         return (
-            f'<span class="meta-badge">quality chosen '
+            f'<span class="meta-badge">Quality chosen '
             f'\u2192 {treasure["quality"]}, {count_phrase}</span>'
         )
 
-    rolled = format_roll(treasure["raw_quality_roll"], treasure["quality_mod"])
+    rolled = _format_roll_total(
+        treasure["raw_quality_roll"], treasure["quality_mod"], total=treasure["quality_roll"],
+    )
     return (
-        f'Quality roll <span class="recent-roll">{rolled}</span> '
-        f'<span class="meta-badge">= {treasure["quality_roll"]} '
-        f'\u2192 {treasure["quality"]}, {count_phrase}</span>'
+        f'Quality roll: <span class="recent-roll">{rolled}</span> '
+        f'<span class="meta-badge">\u2192 {treasure["quality"]}, {count_phrase}</span>'
     )
 
 
@@ -2463,9 +2494,9 @@ def _render_treasure_check_result(
     )
 
     html = (
-        f"Rolled "
-        f'<span class="recent-roll">{format_roll(result["raw_roll"], result["mod"])}</span> '
-        f'vs DC {result["treasure_dc_before"]} {badge}<br><br>'
+        f"Search roll: "
+        f'<span class="recent-roll">{_format_roll_total(result["raw_roll"], result["mod"])}</span> '
+        f'vs DC {result["treasure_dc_before"]} \u2192 {badge}<br><br>'
     )
 
     if found:
@@ -2559,13 +2590,13 @@ def _render_encounter_result(result, show_treasure=True, show_rolls=True, room_i
     nothing to explain there, not even a "carries no treasure" note.
 
     `show_rolls=False` hides all roll/DC mechanics entirely (no
-    "Rolled ... vs DC ..." line, no count-breakdown formula) - used
+    "Search/Encounter roll: ... vs DC ..." line, no count-breakdown formula) - used
     when revisiting an older Crawling Mode room via "Go Back": what's
     in the room is still shown, but the dice that produced it (back
     when it was first generated) aren't re-litigated every time.
 
     `result["mode"] == "generated"` (from "generate_encounter") skips
-    the "Rolled ... vs DC ..." framing entirely too, since no check
+    the "Search/Encounter roll: ... vs DC ..." framing entirely too, since no check
     actually happened there - mirrors how the Treasure Generator's
     unconditional "Generate Treasure" skips DC framing too.
 
@@ -2627,12 +2658,12 @@ def _render_encounter_result(result, show_treasure=True, show_rolls=True, room_i
         treasure_html = ""
 
     return f"""
-    Rolled
+    Encounter roll:
     <span class="recent-roll">
-        {format_roll(result['raw_roll'], result['mod'])}
+        {_format_roll_total(result['raw_roll'], result['mod'])}
     </span>
     vs DC {result['dc_before']}
-    {badge}
+    \u2192 {badge}
     <br><br>
     {body}
     {treasure_html}
@@ -2650,9 +2681,12 @@ def _render_room_roll_badge(label, roll, depth, show_rolls):
     One small "how this was determined" badge for a room's Location
     or Detail. Value-first design: the actual name is the headline
     (see _render_room_card below), this is just the subtle footnote
-    explaining the roll behind it - the same "quality roll X = Y ->
-    tier" idea used for treasure (_render_quality_roll_line), instead
-    of a bare number sitting in front of the name with no context.
+    explaining the roll behind it - the same "{label} roll: ... =
+    total" template used for every other roll display in the UI (see
+    _format_roll_total), just without a "\u2192 outcome" suffix -
+    unlike Quality/Search/Encounter rolls, the outcome here is
+    already the room's own title sitting right above, so repeating it
+    in the badge too would just be noise.
 
     `roll` is the room's stored location_roll/detail_roll - the
     *total* (d20 + depth) roll_table() actually rolled against the
@@ -2669,7 +2703,7 @@ def _render_room_roll_badge(label, roll, depth, show_rolls):
     if roll is None:
         return f'<span class="meta-badge">{label} chosen</span>'
     raw = roll - depth
-    return f'<span class="meta-badge">{label} rolled {format_roll(raw, depth)} = {roll}</span>'
+    return f'<span class="meta-badge">{label} roll: {_format_roll_total(raw, depth)}</span>'
 
 
 _TREASURE_CONTEXT_LABELS = {
