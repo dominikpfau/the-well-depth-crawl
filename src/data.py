@@ -407,7 +407,26 @@ DETAIL_MODIFIERS = {
 # here instead of just flavor text. Most locations/details have no
 # entry at all (nothing structured beyond their description) - only
 # add one here once there's an actual rule to enforce.
-LOCATION_TRAITS = {}
+# A second, independent treasure roll beyond the room's own usual
+# hidden-treasure search (same "extra_treasure_context" mechanism
+# DETAIL_TRAITS uses below - see game.py's _generate_room and
+# _render_room_treasures): both "Mine" ("there is a 1 in 3 chance
+# that a valuable ore vein can be found here... removing it requires
+# time and a pickaxe") and "Public Rock Garden" ("1 in 3 chance that
+# something valuable can be extracted with time and a pickaxe") get
+# the exact same flat-chance, no-DC, visible-immediately mechanic as
+# "Crevice" below, sharing the same "pickaxe" context/label - it's a
+# different kind of visible, extractable find (an ore vein/mineral
+# deposit rather than something at the bottom of a gap), but still
+# just one shared context, not two. "extra_treasure_source" is what
+# tells them apart *which* dedicated table to actually roll on
+# (MINE_TREASURE_TABLES / ROCK_GARDEN_TREASURE_TABLES in game.py's
+# generate_mine_treasure/generate_rock_garden_treasure) - same idea
+# as "guaranteed_treasure_source" above, just for this mechanism.
+LOCATION_TRAITS = {
+    "Mine": {"extra_treasure_context": "pickaxe", "extra_treasure_source": "mine"},
+    "Public Rock Garden": {"extra_treasure_context": "pickaxe", "extra_treasure_source": "rock_garden"},
+}
 
 DETAIL_TRAITS = {
     "Dead End": {"blocks_deeper": True},
@@ -746,6 +765,134 @@ BULKY_TREASURE_TABLES = {
         6: "Petrified rosewood organ, pipes tipped in ivory",
     },
 }
+
+# "Mine"'s own pickaxe-extractable find (see LOCATION_TRAITS'
+# "extra_treasure_context": "pickaxe" + "extra_treasure_source":
+# "mine", and game.py's generate_mine_treasure) - "there is a 1 in 3
+# chance that a valuable ore vein can be found here (otherwise
+# something mundane like coal)". Only 1d3 entries per tier rather
+# than BULKY_TREASURE_TABLES' 1d6 - The Well is a d6-based game with
+# no d4s, and this only ever comes up on a 1-in-3 roll to begin with,
+# so it's seen far less often and doesn't need as much variety to
+# avoid repeats feeling stale.
+#
+# Follows TREASURE_TABLES' material-per-tier convention as closely as
+# an unrefined, uncut mine find reasonably can (see
+# BULKY_TREASURE_TABLES' own comment for the general idea) - checked
+# tier by tier against that table's own items: mundane stays
+# material-free the same way it does there (rusty iron junk is junk
+# *because* it's rusty/broken, not because iron itself is a mundane-
+# tier material - iron proper belongs to moderate); minor is bronze/
+# brass/copper only, deliberately never "iron" (that's moderate's
+# signal - mixing it in here would blur the very "read the material,
+# know the worth" logic this is supposed to preserve); moderate is
+# silver/iron/stone; valuable leans on gold/black-lead plus that
+# tier's own explicit "Rare mineral (fire opal, starry obsidian...)"
+# entry, framed here as still-uncut/raw rather than already "cut"
+# like the normal table's version; excellent echoes entry 15 there
+# almost verbatim ("Pitchblende or hornblende ore, pitch black, green
+# shimmer, silver speckles"). Past that, an actual mine has no real
+# use for "fine woods" or "petrified furniture", so rare/legendary
+# escalate into real, still-unclaimed-elsewhere precious materials
+# instead (platinum, corundum, meteoric iron, iridium) - named
+# specifically rather than left as a vague "rare ore", the same way
+# every other tier here is.
+MINE_TREASURE_TABLES = {
+    "mundane": {
+        1: "Seam of common coal, barely worth hauling out",
+        2: "Crumbling iron slag, already picked clean",
+        3: "Waterlogged, clay-streaked rock - worthless",
+    },
+    "minor": {
+        1: "Vein of raw copper ore, still bright where exposed",
+        2: "Nugget of tin ore, enough for a batch of bronze",
+        3: "Thin seam of brass-toned pyrite - fool's gold, but sellable as a curiosity",
+    },
+    "moderate": {
+        1: "Vein of raw silver ore threading through the rock",
+        2: "Dense, well-formed iron ore deposit",
+        3: "Chunk of banded agate embedded in the stone",
+    },
+    "valuable": {
+        1: "Vein of raw gold, glinting even in torchlight",
+        2: "Deposit of heavy black-lead ore",
+        3: "Rough fire opal or starry obsidian, still fused to the rock",
+    },
+    "excellent": {
+        1: "Vein of pitchblende, faintly warm to the touch",
+        2: "Seam of hornblende, dark and glassy",
+        3: "Where the two meet: pitch black ore flecked with silver and green",
+    },
+    "rare": {
+        1: "Vein of raw platinum, denser and rarer than any gold seam",
+        2: "Pocket of raw corundum crystals - could be ruby or sapphire once cut",
+        3: "Seam of ore so pure the assayers would call it impossible",
+    },
+    "legendary": {
+        1: "A single flawless gem, fist-sized, still embedded in the rock",
+        2: "A seam of raw meteoric iron, cold to the touch despite the depths",
+        3: "A vein of pure iridium, rarer than anything else this mine has yielded",
+    },
+}
+
+# "Public Rock Garden"'s own pickaxe-extractable find (same
+# LOCATION_TRAITS mechanism as "Mine" above, "extra_treasure_source":
+# "rock_garden" - see game.py's generate_rock_garden_treasure) -
+# "1 in 3 chance that something valuable can be extracted with time
+# and a pickaxe", following up on the location's own "artificial
+# crystal growth produced breathtaking displays". Same 1d3-per-tier
+# sizing as MINE_TREASURE_TABLES above, and checked against
+# TREASURE_TABLES' tiers the same careful way that one's own comment
+# describes - ornamental stone/crystal instead of raw ore, so a "cut"
+# or "polished" find fits here (unlike Mine's uncut framing - this
+# location is already about cultivated, on-display growth, not a
+# working excavation), moderate leans on the exact same stone jewelry
+# materials TREASURE_TABLES itself names for that tier (jasper, agate,
+# lapis lazuli), and valuable/rare/legendary name specific real gems
+# throughout rather than a vague "rare crystal" - reusing fire opal/
+# starry obsidian/black opal/diamond where TREASURE_TABLES already
+# uses them (at the same or an escalated tier, same as how it reuses
+# diamond and sapphire itself between valuable and legendary), and
+# introducing peridot/moonstone/tourmaline/star sapphire where a
+# fresh, still-unclaimed-elsewhere material was needed instead.
+ROCK_GARDEN_TREASURE_TABLES = {
+    "mundane": {
+        1: "Dull grey pebble, nothing special",
+        2: "Chunk of fused gravel, worthless",
+        3: "Cloudy, cracked quartz nodule",
+    },
+    "minor": {
+        1: "Small stone ringed with a dull, bronze-toned patina",
+        2: "Copper-streaked pebble, pretty but common",
+        3: "Cluster of brass-colored mica flakes",
+    },
+    "moderate": {
+        1: "Polished agate stone, swirled with color",
+        2: "Chunk of jasper, veined with iron-red",
+        3: "Cluster of lapis lazuli fragments",
+    },
+    "valuable": {
+        1: "Polished fire-opal shard, grown within a crystal cluster",
+        2: "Vein of gold-flecked quartz",
+        3: "Cluster of richly colored starry-obsidian crystals",
+    },
+    "excellent": {
+        1: "Cluster of pitchblende crystals, faintly glinting",
+        2: "Dark, glassy hornblende crystal formation",
+        3: "Geode lined where the two meet - pitch black, flecked with silver",
+    },
+    "rare": {
+        1: "Perfectly formed cluster of peridot crystals, vivid green in dim light",
+        2: "Geode lined with moonstone, each crystal glowing faintly",
+        3: "Fused cluster of tourmaline shards, banded in impossible colors",
+    },
+    "legendary": {
+        1: "A single flawless diamond crystal, larger than a fist",
+        2: "A fused cluster of black opal and moonstone, dazzling even unpolished",
+        3: "A vein of raw star sapphire running straight through solid rock",
+    },
+}
+
 
 TREASURE_EXTRA_ITEMS_TABLE = {
     5: [{"category": "consumable", "amount": 1}],

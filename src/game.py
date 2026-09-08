@@ -31,6 +31,7 @@ from data import (
     LOCATION_TRAITS, DETAIL_TRAITS,
     TREASURE_TABLES, TREASURE_QUALITY_TABLE, TREASURE_EXTRA_ITEMS_TABLE,
     SAFE_MUNDANE_CONTENTS, BULKY_TREASURE_TABLES,
+    MINE_TREASURE_TABLES, ROCK_GARDEN_TREASURE_TABLES,
     CONSUMABLE_SUBTYPES, AMPULES_TABLE, POTIONS_TABLE, MISCELLANY_TABLE, ARTIFACTS_TABLE,
     NEXT_LEVEL, ROLL_TWICE, MONSTERS, MONSTERS_WITHOUT_TREASURE, ENCOUNTER_TABLES,
 )
@@ -171,24 +172,27 @@ def generate_treasure(quality_mod=0, dungeon_level=1, forced_quality=None):
     }
 
 
-def generate_bulky_treasure(quality_mod=0):
+def _generate_single_tier_item(table, item_die, quality_mod=0):
     """
-    The dedicated generator for a "Bulky Treasure" detail's own
-    guaranteed find (see DETAIL_TRAITS' "guaranteed_treasure_source":
-    "bulky") - "something valuable that is hard to move... a lavish
-    piece of furniture, a huge ornate rug, or a musical instrument".
-    Rolls a quality tier the same way generate_treasure() does (so
-    wealth modifiers etc. apply the same way), but always resolves to
-    exactly one item straight off BULKY_TREASURE_TABLES' matching 1d6
-    table for that tier - no "extra items" layered on top the way
-    generate_treasure() does, since this is one large, singular
-    object, not a haul of several things.
+    Shared logic behind generate_bulky_treasure/generate_mine_treasure/
+    generate_rock_garden_treasure - each "this always resolves to
+    exactly one item, not a whole haul" generator. Rolls a quality
+    tier the same way generate_treasure() does (so wealth modifiers
+    etc. apply the same way), then picks one entry from `table`
+    (keyed 1..item_die - 6 for BULKY_TREASURE_TABLES, 3 for the
+    smaller MINE_TREASURE_TABLES/ROCK_GARDEN_TREASURE_TABLES: The
+    Well is a d6-based game with no d4s, and these only ever come up
+    on a 1-in-3 roll to begin with, so they're seen far less often
+    and don't need as much variety to avoid repeats feeling stale)
+    for that tier. No "extra items" layered on top the way
+    generate_treasure() does - this is one large or singular find,
+    not a haul of several things.
     """
     raw_roll = random.randint(1, 6)
     quality_roll = max(0, min(12, raw_roll + quality_mod))
     _, quality = TREASURE_QUALITY_TABLE[quality_roll]
 
-    item_text = BULKY_TREASURE_TABLES[quality][random.randint(1, 6)]
+    item_text = table[quality][random.randint(1, item_die)]
 
     return {
         "quality_roll": quality_roll,
@@ -200,6 +204,36 @@ def generate_bulky_treasure(quality_mod=0):
         "quality": quality,
         "item_list": [{"id": 0, "text": item_text}],
     }
+
+
+def generate_bulky_treasure(quality_mod=0):
+    """
+    The dedicated generator for a "Bulky Treasure" detail's own
+    guaranteed find (see DETAIL_TRAITS' "guaranteed_treasure_source":
+    "bulky") - "something valuable that is hard to move... a lavish
+    piece of furniture, a huge ornate rug, or a musical instrument".
+    """
+    return _generate_single_tier_item(BULKY_TREASURE_TABLES, 6, quality_mod)
+
+
+def generate_mine_treasure(quality_mod=0):
+    """
+    The dedicated generator for a "Mine" location's own pickaxe-
+    extractable find (see LOCATION_TRAITS' "extra_treasure_source":
+    "mine") - "there is a 1 in 3 chance that a valuable ore vein can
+    be found here".
+    """
+    return _generate_single_tier_item(MINE_TREASURE_TABLES, 3, quality_mod)
+
+
+def generate_rock_garden_treasure(quality_mod=0):
+    """
+    The dedicated generator for a "Public Rock Garden" location's own
+    pickaxe-extractable find (see LOCATION_TRAITS' "extra_treasure_
+    source": "rock_garden") - "1 in 3 chance that something valuable
+    can be extracted with time and a pickaxe".
+    """
+    return _generate_single_tier_item(ROCK_GARDEN_TREASURE_TABLES, 3, quality_mod)
 
 
 def generate_paint():
@@ -844,6 +878,33 @@ def _room_guaranteed_treasure_source(room) -> str:
     )
 
 
+def _room_extra_treasure_traits(room):
+    """
+    Every distinct extra-treasure traits dict that applies to this
+    room - one per location/detail trait declaring an
+    "extra_treasure_context", from its location's trait, its detail's
+    trait, or (not disallowed, just rare - e.g. a "Mine" location
+    that also happens to roll a "Safe" detail) both at once,
+    deduplicated by context value. Returns the whole traits dict
+    rather than just the context value, so a context-specific
+    generator lookup (e.g. "extra_treasure_source", used by
+    "pickaxe" to tell "Mine" and "Public Rock Garden" apart even
+    though they share the same context/label) can ride along with
+    it. See DETAIL_TRAITS'/LOCATION_TRAITS' "extra_treasure_context"
+    and _generate_room for how each context actually gets rolled.
+    """
+    loc_traits = LOCATION_TRAITS.get(room["location"], {})
+    det_traits = DETAIL_TRAITS.get(room["detail"], {})
+    result = []
+    seen_contexts = set()
+    for traits in (loc_traits, det_traits):
+        context = traits.get("extra_treasure_context")
+        if context and context not in seen_contexts:
+            seen_contexts.add(context)
+            result.append(traits)
+    return result
+
+
 def _room_special_connection_kind(room):
     """
     "lift" / "secret_passage" / "fireplace" if this room's detail has
@@ -1376,90 +1437,138 @@ def _generate_room(
             # either (see _render_room_treasures).
             room["ransacked"] = True
 
-        extra_context = DETAIL_TRAITS.get(detail, {}).get("extra_treasure_context")
-        if extra_context == "crevice":
-            # A flat 1-in-3 chance, no DC check involved at all (the
-            # description just says "1 in 3 chance", not "roll
-            # against the treasure DC") - and, if it hits, an
-            # unconditional roll on the treasure table, same as
-            # "open"/guaranteed_treasure above. Also visible
-            # immediately like "open", not gated behind "ransacked" -
-            # you can already see the crevice (and whatever's visible
-            # at the bottom of it) just by being in the room, no
-            # search action needed. The entry is added either way,
-            # hit or miss - a default-visible, chance-based context
-            # (as opposed to "open"'s unconditional find) still needs
-            # its own labeled group in the UI even when it turns up
-            # nothing, the same way a fresh "ransack" roll does;
-            # silently omitting the entry on a miss would make an
-            # already-generated, empty crevice look identical to a
-            # room that never had one to check in the first place.
-            generated = None
-            if random.randint(1, 3) == 1:
-                generated = generate_treasure(
-                    quality_mod=level_modifiers.get("wealth", 0),
-                    dungeon_level=used_depth,
+        for extra_traits in _room_extra_treasure_traits(room):
+            extra_context = extra_traits["extra_treasure_context"]
+            if extra_context == "crevice":
+                # A flat 1-in-3 chance, no DC check involved at all
+                # (the description just says "1 in 3 chance", not
+                # "roll against the treasure DC") - and, if it hits,
+                # an unconditional roll on the treasure table, same
+                # as "open"/guaranteed_treasure above. Also visible
+                # immediately like "open", not gated behind
+                # "ransacked" - you can already see the crevice (and
+                # whatever's visible at the bottom of it) just by
+                # being in the room, no search action needed. The
+                # entry is added either way, hit or miss - a default-
+                # visible, chance-based context (as opposed to
+                # "open"'s unconditional find) still needs its own
+                # labeled group in the UI even when it turns up
+                # nothing, the same way a fresh "ransack" roll does;
+                # silently omitting the entry on a miss would make an
+                # already-generated, empty crevice look identical to
+                # a room that never had one to check in the first
+                # place.
+                generated = None
+                if random.randint(1, 3) == 1:
+                    generated = generate_treasure(
+                        quality_mod=level_modifiers.get("wealth", 0),
+                        dungeon_level=used_depth,
+                    )
+                    _renumber_items(generated)
+                room["treasures"].append({
+                    "context": "crevice",
+                    "raw_roll": None,
+                    "mod": None,
+                    "treasure_dc_before": None,
+                    "found_treasure": generated,
+                    "blocked": False,
+                })
+            elif extra_context == "pickaxe":
+                # "Mine"/"Public Rock Garden" locations - same flat
+                # 1-in-3, no-DC, visible-immediately, added-either-way
+                # mechanic as "crevice" above (see its comment for the
+                # full reasoning) - just a different thing you can see
+                # is there without searching (an ore vein/mineral
+                # deposit rather than something at the bottom of a
+                # gap), and its own context/label so the room card is
+                # clear about which is which. Both locations share
+                # this one context, but "extra_treasure_source" (on
+                # the same traits dict the context itself came from)
+                # points at each one's own dedicated table
+                # (MINE_TREASURE_TABLES/ROCK_GARDEN_TREASURE_TABLES) -
+                # a vein of ore and an ornamental crystal cluster are
+                # both "something extractable with a pickaxe", but
+                # not the same *kind* of find. "Mine"'s own
+                # description additionally says to "replace improper
+                # results with larger quantities of something less
+                # valuable" - a judgment call on which results even
+                # count as "improper" for a chunk of raw ore, left to
+                # whoever's running the game rather than enforced
+                # here, same as the note about halving brute-force
+                # rolls on a "Safe" isn't encoded as a real mechanic
+                # either.
+                generated = None
+                if random.randint(1, 3) == 1:
+                    source = extra_traits.get("extra_treasure_source")
+                    quality_mod = level_modifiers.get("wealth", 0)
+                    if source == "mine":
+                        generated = generate_mine_treasure(quality_mod=quality_mod)
+                    elif source == "rock_garden":
+                        generated = generate_rock_garden_treasure(quality_mod=quality_mod)
+                    else:
+                        generated = generate_treasure(
+                            quality_mod=quality_mod, dungeon_level=used_depth,
+                        )
+                    _renumber_items(generated)
+                room["treasures"].append({
+                    "context": "pickaxe",
+                    "raw_roll": None,
+                    "mod": None,
+                    "treasure_dc_before": None,
+                    "found_treasure": generated,
+                    "blocked": False,
+                })
+            elif extra_context == "safe":
+                # "roll for treasure as if ransacking the location" - the
+                # exact same DC-gated mechanic (and the exact same shared
+                # treasure_dc pool, advanced same as any other check) as
+                # the room's own hidden-treasure roll just above, just a
+                # second, independent roll for the safe specifically.
+                # Gated behind its own "safe_opened" flag/"open_safe"
+                # action instead of "ransacked" - picking a lock isn't
+                # part of generally searching the room.
+                safe_dc_before = treasure_dc
+                safe_check = roll_location_treasure(
+                    treasure_dc, treasure_mods, dungeon_level=used_depth
                 )
-                _renumber_items(generated)
-            room["treasures"].append({
-                "context": "crevice",
-                "raw_roll": None,
-                "mod": None,
-                "treasure_dc_before": None,
-                "found_treasure": generated,
-                "blocked": False,
-            })
-        elif extra_context == "safe":
-            # "roll for treasure as if ransacking the location" - the
-            # exact same DC-gated mechanic (and the exact same shared
-            # treasure_dc pool, advanced same as any other check) as
-            # the room's own hidden-treasure roll just above, just a
-            # second, independent roll for the safe specifically.
-            # Gated behind its own "safe_opened" flag/"open_safe"
-            # action instead of "ransacked" - picking a lock isn't
-            # part of generally searching the room.
-            safe_dc_before = treasure_dc
-            safe_check = roll_location_treasure(
-                treasure_dc, treasure_mods, dungeon_level=used_depth
-            )
-            treasure_dc = safe_check["next_dc"]
+                treasure_dc = safe_check["next_dc"]
 
-            safe_success = not safe_check.get("blocked") and bool(safe_check["treasure"])
-            safe_found = safe_check["treasure"]
-            if not safe_check.get("blocked") and not safe_found:
-                # "If no treasure is found, place something mundane
-                # inside" - a single flavor item instead of the usual
-                # rolled-quality-tier result, still shaped like one
-                # (found_treasure dict with a one-item item_list) so
-                # it renders through the exact same path as anything
-                # else here. This is a consolation, not a success -
-                # "success" above is fixed at the real roll's outcome
-                # *before* this substitution, specifically so the
-                # rendered badge still reads "Failure" (the roll
-                # itself found nothing of value) even though
-                # found_treasure ends up non-empty either way.
-                safe_found = {
-                    "quality_roll": None,
-                    "quality_mod": None,
-                    "raw_quality_roll": None,
-                    "base_item_count": 1,
-                    "extra_item_count": 0,
-                    "number_of_items": 1,
-                    "quality": "mundane",
-                    "item_list": [{"id": 0, "text": random.choice(SAFE_MUNDANE_CONTENTS)}],
-                }
+                safe_success = not safe_check.get("blocked") and bool(safe_check["treasure"])
+                safe_found = safe_check["treasure"]
+                if not safe_check.get("blocked") and not safe_found:
+                    # "If no treasure is found, place something mundane
+                    # inside" - a single flavor item instead of the usual
+                    # rolled-quality-tier result, still shaped like one
+                    # (found_treasure dict with a one-item item_list) so
+                    # it renders through the exact same path as anything
+                    # else here. This is a consolation, not a success -
+                    # "success" above is fixed at the real roll's outcome
+                    # *before* this substitution, specifically so the
+                    # rendered badge still reads "Failure" (the roll
+                    # itself found nothing of value) even though
+                    # found_treasure ends up non-empty either way.
+                    safe_found = {
+                        "quality_roll": None,
+                        "quality_mod": None,
+                        "raw_quality_roll": None,
+                        "base_item_count": 1,
+                        "extra_item_count": 0,
+                        "number_of_items": 1,
+                        "quality": "mundane",
+                        "item_list": [{"id": 0, "text": random.choice(SAFE_MUNDANE_CONTENTS)}],
+                    }
 
-            _renumber_items(safe_found)
-            room["treasures"].append({
-                "context": "safe",
-                "treasure_roll": safe_check["roll"],
-                "raw_roll": safe_check["raw_roll"],
-                "mod": safe_check["mod"],
-                "treasure_dc_before": safe_dc_before,
-                "found_treasure": safe_found,
-                "blocked": safe_check.get("blocked", False),
-                "success": safe_success,
-            })
+                _renumber_items(safe_found)
+                room["treasures"].append({
+                    "context": "safe",
+                    "treasure_roll": safe_check["roll"],
+                    "raw_roll": safe_check["raw_roll"],
+                    "mod": safe_check["mod"],
+                    "treasure_dc_before": safe_dc_before,
+                    "found_treasure": safe_found,
+                    "blocked": safe_check.get("blocked", False),
+                    "success": safe_success,
+                })
 
     # --- Random encounter check for entering the location. Skipped
     # entirely (room["entering_encounter"] stays None) if
@@ -2570,6 +2679,7 @@ _TREASURE_CONTEXT_LABELS = {
     "crevice": "At the bottom of the crevice",
     "safe": "Inside the safe",
     "bulky": "Bulky Treasure",
+    "pickaxe": "Extractable with a pickaxe",
 }
 
 
