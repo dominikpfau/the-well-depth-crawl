@@ -2398,15 +2398,22 @@ def _pluralize(count, singular, plural=None):
 def _render_quality_summary(treasure):
     """
     Just "Quality: X, N items" - no roll/formula info at all. Used
-    when revisiting an older Crawling Mode room via "Go Back": the
-    treasure that's there is still shown, but the dice that produced
-    it (back when the room was first generated) aren't re-litigated
-    every time you look at it again.
+    when revisiting an older Crawling Mode room via "Go Back" (the
+    dice that produced what's there aren't re-litigated every time)
+    and for guaranteed treasure that was never rolled for at all
+    (open/bulky/pickaxe/crevice - see _room_has_guaranteed_treasure).
+
+    Deliberately plain label text + a small muted `.meta-badge`
+    rather than a bold `<strong>` tag - the same visual weight
+    _render_quality_roll_line's own badge already uses, so this reads
+    as the same kind of secondary, supporting detail either way
+    instead of competing with the actual item text listed right below
+    it for attention.
     """
     count_phrase = _pluralize(treasure["base_item_count"], "item")
     if treasure["extra_item_count"] > 0:
         count_phrase += f' + {_pluralize(treasure["extra_item_count"], "extra")}'
-    return f'<strong>Quality:</strong> {treasure["quality"]}, {count_phrase}'
+    return f'Quality: <span class="meta-badge">{treasure["quality"]}, {count_phrase}</span>'
 
 
 def _render_quality_roll_line(treasure):
