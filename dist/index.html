@@ -415,6 +415,31 @@
     }
 
     /* ------------------------
+       Treasure Context Groups
+       ------------------------ */
+    /* A room's Treasure section (see game.py's _render_room_treasures)
+       can hold more than one of these - a hidden stash still to be
+       searched for, treasure lying out in the open, loot off a
+       defeated monster - each under its own small label so they read
+       as distinct sources rather than one undifferentiated pile. */
+    .treasure-context {
+        margin-top: 0.5rem;
+    }
+
+    .treasure-context:first-child {
+        margin-top: 0;
+    }
+
+    .treasure-context-label {
+        font-size: 0.75rem;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+        color: #a08a4a;
+        margin-bottom: 0.2rem;
+    }
+
+    /* ------------------------
        Crawling Mode - Dungeon Map
        Every box's (left, top) pixel position and every connecting
        line's endpoints are computed in Python (_compute_tree_x /
@@ -2785,41 +2810,46 @@ def _room_has_monster(room) -> bool:
 
 def _room_has_treasure(room) -> bool:
     """
-    True if this room's own treasure roll actually found something,
-    at least one item from it is still there, *and* the room has
-    actually been searched - used for the Dungeon Map's real treasure
-    marker. A room's treasure is rolled for at generation time same
-    as ever, but stays hidden (see "ransacked") until "ransack_room"
-    reveals it - or, for a location/detail with DETAIL_TRAITS'/
-    LOCATION_TRAITS' "guaranteed_treasure" (lying out in the open,
-    e.g. "Treasure Pile"/"Portcullis"), it's marked ransacked from
-    the moment it's generated (see _generate_room) and this is true
-    right away. Individually removing items (see "remove_treasure_
-    item") can empty item_list out entirely without clearing
-    found_treasure itself (the quality/roll info is still meaningful
-    history), so this checks item_list specifically rather than just
-    found_treasure's truthiness.
+    True if this room currently has at least one *visible* treasure
+    item across any of its treasure entries (see "treasures") - used
+    for the Dungeon Map's real treasure marker. "open"/"monster"
+    entries are always visible; a "ransack" entry only counts once
+    the room's been searched (see "ransacked" / "ransack_room") -
+    for a location/detail with DETAIL_TRAITS'/LOCATION_TRAITS'
+    "guaranteed_treasure" (lying out in the open, e.g. "Treasure
+    Pile"/"Portcullis") that's immediately, from the moment it's
+    generated (see _generate_room). Individually removing items (see
+    "remove_treasure_item") can empty an entry's item_list out
+    entirely without clearing found_treasure itself (the quality/roll
+    info is still meaningful history), so this checks item_list
+    specifically rather than just found_treasure's truthiness.
     """
-    if not room.get("ransacked"):
-        return False
-    result = room.get("treasure_result")
-    if not result:
-        return False
-    found = result.get("found_treasure")
-    return bool(found and found.get("item_list"))
+    for entry in room.get("treasures", []):
+        if entry["context"] == "ransack" and not room.get("ransacked"):
+            continue
+        found = entry.get("found_treasure")
+        if found and found.get("item_list"):
+            return True
+    return False
 
 
 def _room_treasure_pending_search(room) -> bool:
     """
-    True if this room has a treasure roll on record but hasn't been
-    ransacked yet - regardless of whether anything was actually
-    found, since that's exactly the point: showing a marker only
-    when treasure is actually there (even a distinct "nothing here"
-    non-marker) would let the Dungeon Map spoil the search before it
-    happens. Used for the Dungeon Map's grey "?" marker, which is
-    shown instead of (never alongside) the real treasure marker.
+    True if this room has a "ransack"-context treasure entry (its own
+    hidden treasure, on record since generation - see _generate_room)
+    that hasn't been revealed yet - regardless of whether anything
+    was actually found there, since that's exactly the point: showing
+    a marker only when treasure is actually there (even a distinct
+    "nothing here" non-marker) would let the Dungeon Map spoil the
+    search before it happens. Used for the Dungeon Map's grey "?"
+    marker, shown instead of (never alongside) the real treasure
+    marker. Doesn't consider "open"/"monster" entries at all - they're
+    never gated behind a search in the first place, so there's
+    nothing "pending" about them.
     """
-    return bool(room.get("treasure_result")) and not room.get("ransacked")
+    if room.get("ransacked"):
+        return False
+    return any(entry["context"] == "ransack" for entry in room.get("treasures", []))
 
 
 # Inline SVGs traced directly from Tabler Icons (MIT License,
@@ -3015,6 +3045,19 @@ def _roll_special_link_depth(current_depth):
     return current_depth + roll
 
 
+# Whether a room's entering encounter should also roll (and reveal,
+# under the "monster" treasure context) loot carried by the monsters
+# themselves - see _generate_room. Turned off for now: the "monster"
+# context, roll_monster_treasure() call, and _render_room_treasures'
+# grouping for it all still work and stay ready to go the moment this
+# flips back to True; just nothing currently triggers that code path
+# for a room's own entering encounter. (The standalone Encounter
+# Generator's "check_encounter"/"generate_encounter" actions are
+# unaffected either way - they call roll_monster_treasure() directly,
+# not through here.)
+_CRAWLING_MONSTER_LOOT_ENABLED = False
+
+
 def _generate_room(
     used_depth, level, level_modifiers, roll_treasure, roll_encounter,
     treasure_dc, encounter_dc, forced_location=None, forced_detail=None,
@@ -3054,16 +3097,35 @@ def _generate_room(
         "detail_roll": det_roll,
         "detail": detail,
         "detail_text": DETAIL_DESCRIPTIONS.get(detail, "No description available."),
-        "treasure_result": None,
-        # Whether this room's treasure (already rolled below, same as
-        # ever - see "treasure_result") has actually been revealed to
-        # the players yet. Starts False - the room card shows a
-        # "Ransack Room" button instead of the treasure section until
-        # "ransack_room" flips this - except for a location/detail
-        # with a "guaranteed_treasure" trait (lying out in the open,
-        # e.g. "Treasure Pile"/"Portcullis"), which sets this True
-        # further down instead, immediately: nothing to search for
-        # when it's just sitting there in view.
+        # A room can end up with more than one of these at once - a
+        # hidden stash found by searching, treasure sitting out in
+        # the open, loot dropped by a defeated monster - each tagged
+        # with a "context" ("ransack" / "open" / "monster") so the
+        # room card can group and label them separately rather than
+        # dumping every item into one undifferentiated list (see
+        # _render_room_treasures). Every item across every entry in
+        # this same list shares one running id sequence (assigned via
+        # _next_treasure_item_id below) - not restarted per entry -
+        # since "remove_treasure_item" only takes a room id and an
+        # item id, no separate "which entry" dimension, so ids need
+        # to stay unique across the whole room, not just within the
+        # one generate_treasure() call that produced them.
+        "treasures": [],
+        # Whether this room's *hidden* treasure (the "ransack"-context
+        # entry, if there is one) has actually been revealed to the
+        # players yet - "open" and "monster" entries are never gated
+        # by this, they're visible the moment they exist (see
+        # _render_room_treasures). Starts False - the room card shows
+        # a "Ransack Room" button in the "ransack" entry's place until
+        # "ransack_room" flips this - except when there's definitely
+        # nothing to search for in the first place: a location/detail
+        # with the "no_treasure" modifier (already known to be empty,
+        # e.g. "Looted") sets this True immediately further down
+        # instead. A "guaranteed_treasure" location/detail (lying out
+        # in the open, e.g. "Treasure Pile"/"Portcullis") does *not*
+        # skip this on its own - its "open" entry is always visible
+        # regardless, but the room can still separately have its own
+        # hidden stash worth searching for, same as any other room.
         "ransacked": False,
         "entering_encounter": None,
         # Whether this room's own connection to its parent (in
@@ -3081,34 +3143,65 @@ def _generate_room(
         "special_link_id": None,
     }
 
+    def _next_treasure_item_id():
+        # Room-scoped counter, closed over the room dict itself
+        # (already built above) rather than passed around separately
+        # - see the "treasures" field comment for why ids must stay
+        # unique across every entry in the room, not just within one.
+        used = [
+            item["id"]
+            for entry in room["treasures"]
+            for item in (entry.get("found_treasure") or {}).get("item_list", [])
+        ]
+        return (max(used) + 1) if used else 0
+
+    def _renumber_items(found_treasure):
+        if not found_treasure:
+            return
+        next_id = _next_treasure_item_id()
+        for item in found_treasure["item_list"]:
+            item["id"] = next_id
+            next_id += 1
+
     # --- Roll the treasure hidden in this location, right now. Shown
     # immediately - there's no separate "search" step for treasure
-    # anymore. Skipped entirely (room["treasure_result"] stays None)
-    # if roll_treasure is False - the Treasure section then just
-    # isn't shown, rather than shown empty.
-    if roll_treasure and _room_has_guaranteed_treasure(room):
-        # "Treasure Pile"/"Portcullis" etc. - lying out in the open,
-        # not something that has to be searched for: skip the DC
-        # check entirely and just always find something, the same
-        # unconditional roll the Treasure Generator's "Generate
-        # Treasure" button uses. Doesn't touch treasure_dc, since no
-        # check actually happened. raw_roll stays None, which is what
-        # tells _render_treasure_check_result to always render this
-        # plainly - no "Rolled ... vs DC ..." framing, ever - instead
-        # of only when revisiting (see its show_roll handling).
-        generated = generate_treasure(
-            quality_mod=level_modifiers.get("wealth", 0),
-            dungeon_level=used_depth,
-        )
-        room["treasure_result"] = {
-            "raw_roll": None,
-            "mod": None,
-            "treasure_dc_before": None,
-            "found_treasure": generated,
-            "blocked": False,
-        }
-        room["ransacked"] = True
-    elif roll_treasure:
+    # anymore. Skipped entirely (no "ransack"/"open" entry added to
+    # room["treasures"]) if roll_treasure is False - the Treasure
+    # section then just isn't shown, rather than shown empty.
+    if roll_treasure:
+        if _room_has_guaranteed_treasure(room):
+            # "Treasure Pile"/"Portcullis" etc. - lying out in the
+            # open, not something that has to be searched for: skip
+            # the DC check entirely and just always find something,
+            # the same unconditional roll the Treasure Generator's
+            # "Generate Treasure" button uses. Doesn't touch
+            # treasure_dc, since no check actually happened. raw_roll
+            # stays None, which is what tells
+            # _render_treasure_check_result to always render this
+            # plainly - no "Rolled ... vs DC ..." framing, ever -
+            # instead of only when revisiting (see its show_roll
+            # handling). This is independent of (and doesn't skip)
+            # the normal hidden-treasure search roll right below - a
+            # room can have obvious treasure in plain view *and* a
+            # separate stash still worth searching for.
+            generated = generate_treasure(
+                quality_mod=level_modifiers.get("wealth", 0),
+                dungeon_level=used_depth,
+            )
+            _renumber_items(generated)
+            room["treasures"].append({
+                "context": "open",
+                "raw_roll": None,
+                "mod": None,
+                "treasure_dc_before": None,
+                "found_treasure": generated,
+                "blocked": False,
+            })
+
+        # The room's own *hidden* treasure - searched for the normal
+        # way regardless of whether it also happens to have obvious,
+        # guaranteed treasure lying out in the open (see above): those
+        # are two independent sources, not alternatives.
         treasure_mods = collect_modifiers(room, trigger="ransack")
         treasure_mods["treasure_roll"] += level_modifiers.get("wealth", 0)
         treasure_mods["treasure_quality"] += level_modifiers.get("wealth", 0)
@@ -3119,14 +3212,16 @@ def _generate_room(
         )
         treasure_dc = treasure_check["next_dc"]
 
-        room["treasure_result"] = {
+        _renumber_items(treasure_check["treasure"])
+        room["treasures"].append({
+            "context": "ransack",
             "treasure_roll": treasure_check["roll"],
             "raw_roll": treasure_check["raw_roll"],
             "mod": treasure_check["mod"],
             "treasure_dc_before": treasure_dc_before,
             "found_treasure": treasure_check["treasure"],
             "blocked": treasure_check.get("blocked", False),
-        }
+        })
         if treasure_check.get("blocked"):
             # A location/detail with the "no_treasure" modifier (only
             # "Looted" right now, via DETAIL_MODIFIERS - see
@@ -3137,7 +3232,7 @@ def _generate_room(
             # for skipping the search step: nothing to reveal by
             # ransacking that isn't already obvious just from being in
             # the room, so there's no "Ransack Room" button for this
-            # either (see _render_room_card).
+            # either (see _render_room_treasures).
             room["ransacked"] = True
 
     # --- Random encounter check for entering the location. Skipped
@@ -3156,17 +3251,33 @@ def _generate_room(
             if entering_check["success"]
             else None
         )
-        # An encounter met while entering a location never carries its
-        # own treasure - only the location itself does (governed by
-        # roll_treasure above, shown in its own section).
         room["entering_encounter"] = {
             "raw_roll": entering_check["raw_roll"],
             "mod": entering_check["mod"],
             "dc_before": encounter_dc_before,
             "monsters": monsters,
+            # Not rendered from here - a monster group's loot (if any)
+            # is instead added to room["treasures"] below, tagged
+            # "monster", so it shows up grouped alongside the room's
+            # own treasure rather than duplicated in both places. Kept
+            # as its own (always-None, for this caller) key anyway,
+            # matching the shape _render_encounter_result expects -
+            # the standalone Encounter Generator's "check_encounter"/
+            # "generate_encounter" actions populate this same key for
+            # real, for their own inline (non-room, non-grouped)
+            # display.
             "treasure": None,
             "success": entering_check["success"],
         }
+
+        if _CRAWLING_MONSTER_LOOT_ENABLED and roll_treasure and monsters:
+            monster_treasure, treasure_dc = _roll_monster_treasure_if_enabled(
+                monsters, level, level_modifiers, treasure_dc, enabled=True
+            )
+            if monster_treasure is not None:
+                _renumber_items(monster_treasure["found_treasure"])
+                monster_treasure["context"] = "monster"
+                room["treasures"].append(monster_treasure)
 
     return room, treasure_dc, encounter_dc
 
@@ -3427,16 +3538,17 @@ def handle_action(
         # room's own contents (see _room_has_monster's docstring).
         # `room_form` identifies the room (validated against
         # crawl_history the same way "toggle_connection"/"view_room"
-        # already do). A no-op for a room with no treasure_result at
+        # already do). A no-op for a room with no treasure entries at
         # all (roll_treasure was off) or one that's guaranteed/already
         # ransacked - the button that triggers this isn't even shown
-        # in either case (see _render_room_card), so reaching this
-        # branch for one of those would mean something odd already
-        # happened upstream, not a real user action to honor twice.
+        # in either case (see _render_room_treasures), so reaching
+        # this branch for one of those would mean something odd
+        # already happened upstream, not a real user action to honor
+        # twice.
         target_id = _to_int_or_none(room_form)
         if target_id is not None:
             target_room = _room_by_id(crawl_history, target_id)
-            if target_room is not None and target_room.get("treasure_result"):
+            if target_room is not None and target_room.get("treasures"):
                 target_room["ransacked"] = True
 
     elif action == "remove_monster_group":
@@ -3466,7 +3578,12 @@ def handle_action(
     elif action == "remove_treasure_item":
         # Same idea for a single treasure item ("N Silver Bars") -
         # removed once it's been collected. `entry_form` is the
-        # item's stable id (assigned in generate_treasure()).
+        # item's stable id (assigned in _generate_room's
+        # _next_treasure_item_id - unique across every treasure entry
+        # in the room, not just within the one that produced it, so
+        # no separate "which entry" identifier is needed here: this
+        # just checks each of the room's treasure entries in turn and
+        # removes the item from whichever one actually has it).
         # found_treasure itself is deliberately left in place even
         # once item_list is fully emptied (its quality/roll info is
         # still meaningful history) - see _room_has_treasure and
@@ -3477,12 +3594,13 @@ def handle_action(
         item_id = _to_int_or_none(entry_form)
         if target_id is not None and item_id is not None:
             target_room = _room_by_id(crawl_history, target_id)
-            result = target_room.get("treasure_result") if target_room else None
-            found = result.get("found_treasure") if result else None
-            if found and found.get("item_list"):
-                found["item_list"] = [
-                    it for it in found["item_list"] if it["id"] != item_id
-                ]
+            for entry in (target_room.get("treasures", []) if target_room else []):
+                found = entry.get("found_treasure")
+                if found and any(it["id"] == item_id for it in found["item_list"]):
+                    found["item_list"] = [
+                        it for it in found["item_list"] if it["id"] != item_id
+                    ]
+                    break
 
     elif action == "use_lift":
         # Only usable while standing in a room with the "Lift" detail
@@ -4140,6 +4258,61 @@ def _render_room_roll_badge(label, roll, depth, show_rolls):
     return f'<span class="meta-badge">{label} rolled {format_roll(raw, depth)} = {roll}</span>'
 
 
+_TREASURE_CONTEXT_LABELS = {
+    "ransack": "Hidden in room",
+    "open": "Lying in the open",
+    "monster": "Looted from the monsters",
+}
+
+
+def _render_room_treasures(room, show_rolls, room_id, interactive):
+    """
+    Renders every entry in room["treasures"], each under its own
+    small context label (see _TREASURE_CONTEXT_LABELS) - a room can
+    have more than one at once, e.g. a hidden stash the party still
+    has to search for *and* loot already sitting on a monster they've
+    beaten. Only the "ransack" entry (the room's own hidden treasure)
+    is ever gated behind a "Ransack Room" button, and only when
+    `interactive` (Crawling Mode) and the room hasn't been searched
+    yet - "open" (lying out in plain view) and "monster" (dropped by
+    something already defeated) are both visible the moment they
+    exist, same as the Encounter section itself already is. Returns
+    "" if the room has no treasure entries at all (roll_treasure was
+    off), same as before this grouped into contexts.
+    """
+    blocks = []
+    for entry in room.get("treasures", []):
+        label = _TREASURE_CONTEXT_LABELS.get(entry["context"], entry["context"].title())
+
+        if entry["context"] == "ransack" and interactive and not room.get("ransacked"):
+            # What's under this entry was already rolled the moment
+            # this room was generated (same as ever - see
+            # _generate_room), it's just not shown until
+            # "ransack_room" reveals it, one way or the other
+            # (including "nothing here"). Only reachable here at all
+            # when interactive; the Location Generator's own room has
+            # no persistent state to search later, so its hidden
+            # treasure (when rolled for at all) is shown immediately
+            # instead, same as "open"/"monster" always are.
+            body = (
+                f'<button type="button" class="ransack-button" onclick="ransackRoom({room_id})">'
+                f"Ransack Room</button>"
+            )
+        else:
+            body = _render_treasure_check_result(
+                entry, show_roll=show_rolls, room_id=room_id, interactive=interactive
+            )
+
+        blocks.append(
+            f'<div class="treasure-context">'
+            f'<div class="treasure-context-label">{label}</div>'
+            f"{body}"
+            f"</div>"
+        )
+
+    return "".join(blocks)
+
+
 def _render_room_card(room, show_rolls=True, status_note="", status_extra_html="", room_id=None):
     """
     Renders a room's Location/Detail title, how it was determined,
@@ -4194,32 +4367,13 @@ def _render_room_card(room, show_rolls=True, status_note="", status_extra_html="
         """
 
     treasure_html = ""
-    if room.get("treasure_result"):
-        if interactive and not room.get("ransacked"):
-            # Lore: treasure sitting in a room isn't something the
-            # party can see just by knowing the room exists - it has
-            # to actually be searched for. What's under
-            # treasure_result was already rolled the moment this room
-            # was generated (same as ever - see _generate_room), it's
-            # just not shown until "ransack_room" reveals it, one way
-            # or the other (including "nothing here"). Only reachable
-            # here at all when interactive (Crawling Mode); the
-            # Location Generator's own room has no persistent state
-            # to search later, so its treasure (when rolled for at
-            # all) is still shown immediately, same as before.
-            treasure_html = f"""
-            <hr>
-            <strong>Treasure:</strong><br>
-            <button type="button" class="ransack-button" onclick="ransackRoom({room_id})">
-                Ransack Room
-            </button>
-            """
-        else:
-            treasure_html = f"""
-            <hr>
-            <strong>Treasure:</strong><br>
-            {_render_treasure_check_result(room["treasure_result"], show_roll=show_rolls, room_id=room_id, interactive=interactive)}
-            """
+    treasures_body = _render_room_treasures(room, show_rolls, room_id, interactive)
+    if treasures_body:
+        treasure_html = f"""
+        <hr>
+        <strong>Treasure:</strong>
+        {treasures_body}
+        """
 
     return f"""
     <div class="room-title">{room['location']} <span class="room-title-sep">&middot;</span> {room['detail']}</div>

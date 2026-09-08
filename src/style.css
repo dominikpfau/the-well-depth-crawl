@@ -407,6 +407,31 @@
     }
 
     /* ------------------------
+       Treasure Context Groups
+       ------------------------ */
+    /* A room's Treasure section (see game.py's _render_room_treasures)
+       can hold more than one of these - a hidden stash still to be
+       searched for, treasure lying out in the open, loot off a
+       defeated monster - each under its own small label so they read
+       as distinct sources rather than one undifferentiated pile. */
+    .treasure-context {
+        margin-top: 0.5rem;
+    }
+
+    .treasure-context:first-child {
+        margin-top: 0;
+    }
+
+    .treasure-context-label {
+        font-size: 0.75rem;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+        color: #a08a4a;
+        margin-bottom: 0.2rem;
+    }
+
+    /* ------------------------
        Crawling Mode - Dungeon Map
        Every box's (left, top) pixel position and every connecting
        line's endpoints are computed in Python (_compute_tree_x /
