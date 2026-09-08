@@ -2,8 +2,24 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1e1e1e">
 <title>Depthcrawling Tool</title>
 <style>
+    *, *::before, *::after {
+        box-sizing: border-box;
+    }
+
+    html {
+        /* Safety net against anything (a long select label, a wide
+           fixed-width element, ...) accidentally forcing the whole
+           page to scroll sideways on a narrow screen. The Dungeon
+           Map's own horizontal scroll (.dtree-wrapper) is unaffected
+           - it's its own overflow-x:auto scroll container, nested
+           inside this, not this element itself. */
+        overflow-x: hidden;
+    }
+
     body {
         font-family: serif;
         background: #1e1e1e;
@@ -21,6 +37,7 @@
         color: #e0e0e0;
         border: 1px solid #555;
         border-radius: 4px;
+        max-width: 100%;
     }
 
     button {
@@ -558,6 +575,89 @@
     .dtree-badge-treasure-unknown {
         background: #3a3a3a;
         color: #999999;
+    }
+
+    /* ------------------------
+       Mobile
+       ------------------------ */
+    .dtree-wrapper {
+        /* Smooth momentum scrolling for the horizontally-scrollable
+           Dungeon Map on iOS Safari - harmless no-op everywhere else. */
+        -webkit-overflow-scrolling: touch;
+    }
+
+    @media (max-width: 600px) {
+        /* Reclaim horizontal space eaten by desktop-sized padding -
+           on a ~360px-wide phone, 2rem on each side of body plus
+           1rem of .section plus another 1rem of .crawl-entry-current
+           was over 3rem (nearly half the screen) of pure padding
+           before any content even started. */
+        body {
+            padding: 0.75rem;
+        }
+
+        .section {
+            padding: 0.75rem;
+        }
+
+        .description {
+            margin-left: 0.75rem;
+            padding-left: 0.6rem;
+        }
+
+        .crawl-entry-current {
+            padding: 0.75rem;
+        }
+
+        /* A <label>+<select>+<label>+<select> row (e.g. Location +
+           Detail) or a label+input+label+input row (Encounter DC +
+           Treasure DC) wraps via flex-wrap already, but a wrapped-
+           mid-pair layout ("Location: [long select]" then "Detail:"
+           alone before its own select wraps again) reads worse than
+           just stacking the whole row - one label/control per line. */
+        .form-row,
+        .header-row {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .form-row > *,
+        .header-row > * {
+            margin-right: 0;
+            width: 100%;
+        }
+
+        /* ...except checkboxes, which read fine (and better use of
+           space) side by side even on a narrow screen - only the
+           checkbox row itself (already also a .form-row) stays a
+           row, its labels don't each get stretched to full width. */
+        .checkbox-row {
+            flex-direction: row;
+            flex-wrap: wrap;
+        }
+
+        .checkbox-row label {
+            width: auto;
+        }
+
+        /* Bigger tap targets - the desktop padding (0.3rem, roughly
+           a 30px-tall control) is comfortable for a mouse but tight
+           for a fingertip; touch UI guidelines generally want at
+           least ~44px. */
+        input, select, button {
+            padding: 0.55rem 0.7rem;
+        }
+
+        .button-row button {
+            min-width: 100px;
+        }
+
+        /* The small "x"/badges stay visually subtle at rest (see
+           their own comments above) but get a bit more tappable
+           padding around them here, without growing the text itself. */
+        .entry-remove-btn {
+            padding: 0.15rem 0.5rem;
+        }
     }
 
 </style>
