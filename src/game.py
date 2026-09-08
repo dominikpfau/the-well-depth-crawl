@@ -1161,6 +1161,18 @@ def _generate_room(
             "found_treasure": treasure_check["treasure"],
             "blocked": treasure_check.get("blocked", False),
         }
+        if treasure_check.get("blocked"):
+            # A location/detail with the "no_treasure" modifier (only
+            # "Looted" right now, via DETAIL_MODIFIERS - see
+            # collect_modifiers) means there's definitely nothing here
+            # at all, known upfront from the room's own description
+            # ("There is no treasure to be found here.") - the
+            # opposite of guaranteed_treasure, but the same reasoning
+            # for skipping the search step: nothing to reveal by
+            # ransacking that isn't already obvious just from being in
+            # the room, so there's no "Ransack Room" button for this
+            # either (see _render_room_card).
+            room["ransacked"] = True
 
     # --- Random encounter check for entering the location. Skipped
     # entirely (room["entering_encounter"] stays None) if
