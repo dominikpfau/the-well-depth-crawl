@@ -406,6 +406,29 @@
         border-color: #c99a2e;
     }
 
+    /* The optional "smash the amphoras"-style bonus checkbox, shown
+       next to the Ransack Room button for a detail with a
+       DETAIL_TRAITS "ransack_choice" (see game.py's
+       _render_room_treasures). Deliberately plain/inline rather than
+       styled like its own button - it's a modifier on the action
+       next to it, not a second action. */
+    .ransack-choice {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        margin-left: 0.5rem;
+        font-weight: normal;
+        font-size: 0.85rem;
+        cursor: pointer;
+        vertical-align: middle;
+    }
+
+    .ransack-choice input[type="checkbox"] {
+        margin: 0;
+        padding: 0;
+        width: auto;
+    }
+
     /* ------------------------
        Treasure Context Groups
        ------------------------ */

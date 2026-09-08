@@ -371,8 +371,15 @@ LOCATION_MODIFIERS = {
 
 DETAIL_MODIFIERS = {
     "Amphoras": {
+        # treasure_roll's +1 used to live here, applied unconditionally
+        # to every ransack roll - now it's an opt-in choice instead
+        # (DETAIL_TRAITS' "ransack_choice" below, applied retroactively
+        # when ransacking - see handle_action's "ransack_room"),
+        # matching the description's "PCs *can choose* to smash them".
+        # encounter_roll stays: whatever eventually rolls an encounter
+        # check under trigger="ransack" (nothing does yet) picks this
+        # up automatically once it exists.
         "encounter_roll": +1,
-        "treasure_roll": +1,
         "scope": "ransack",
     },
     "Looted": {
@@ -419,6 +426,32 @@ DETAIL_TRAITS = {
     "Lift": {"special_connection": "lift"},
     "Secret Passage": {"special_connection": "secret_passage"},
     "Fireplace": {"special_connection": "fireplace"},
+    # A second, independent treasure roll beyond the room's own usual
+    # hidden-treasure search - see game.py's _generate_room and
+    # _render_room_treasures for how each "extra_treasure_context"
+    # value is actually rolled/gated/labeled:
+    #   "crevice" - a flat 1-in-3 chance, no DC check, always visible
+    #     immediately (you can see the crevice, and whatever's at the
+    #     bottom of it, just by being in the room - no search needed).
+    #   "safe" - its own DC check ("as if ransacking"), gated behind
+    #     its own separate "pick the lock" reveal rather than the
+    #     room's general search, with a mundane fallback (e.g. old
+    #     paperwork) if the roll doesn't find anything.
+    "Crevice": {"extra_treasure_context": "crevice"},
+    "Safe": {"extra_treasure_context": "safe"},
+    # An optional bonus the player can choose to apply when ransacking
+    # (see the "smash amphoras" checkbox next to the Ransack Room
+    # button, and handle_action's "ransack_room") - applied
+    # retroactively to the room's already-rolled hidden-treasure entry
+    # rather than as a fresh roll, since that entry's own roll already
+    # happened back at generation time (see _generate_room). Doesn't
+    # touch the shared treasure_dc pool - see "ransack_room" for why.
+    "Amphoras": {
+        "ransack_choice": {
+            "label": "Smash the amphoras",
+            "treasure_roll_bonus": 1,
+        },
+    },
 }
 
 # ----------------------------
@@ -599,6 +632,25 @@ TREASURE_TABLES = {
         20: "Regal scepter or cane (made from petrified ebony, flawless amber as headpiece)",
     },
 }
+
+# A "Safe" detail's own fallback when its treasure roll doesn't find
+# anything (see DETAIL_TRAITS' "extra_treasure_context": "safe" and
+# game.py's _generate_room) - "place something mundane inside (e.g.
+# business or legal papers)", per its own description. Deliberately
+# its own small table rather than reusing TREASURE_TABLES["mundane"]
+# (generic dungeon debris - broken pottery, rusty keys) - a locked
+# safe holding paperwork instead of junk is a different, more
+# specific flavor.
+SAFE_MUNDANE_CONTENTS = [
+    "Stack of old business ledgers, ink faded past reading",
+    "Bundle of unpaid invoices, tied with string",
+    "Yellowed legal documents, seals long broken",
+    "Property deed for a building that no longer stands",
+    "Bundle of promissory notes, debtor's name illegible",
+    "Personal correspondence, water-damaged and stuck together",
+    "Tax records from a defunct administration",
+    "Household inventory list, nothing on it worth anything now",
+]
 
 TREASURE_EXTRA_ITEMS_TABLE = {
     5: [{"category": "consumable", "amount": 1}],

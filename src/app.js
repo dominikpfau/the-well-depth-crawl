@@ -80,7 +80,8 @@ async function dispatch(action, view, roomId, entryId) {
             getSelectField("monster-select"),
             getSelectField("quality-select"),
             roomId == null ? null : String(roomId),
-            entryId == null ? null : String(entryId)
+            entryId == null ? null : String(entryId),
+            getCheckbox("smash-amphoras")
         );
         renderApp();
     } catch (err) {
@@ -114,6 +115,10 @@ async function toggleConnection(roomId) {
 
 async function ransackRoom(roomId) {
     return dispatch("ransack_room", null, roomId);
+}
+
+async function openSafe(roomId) {
+    return dispatch("open_safe", null, roomId);
 }
 
 async function removeMonsterGroup(roomId, groupId) {
