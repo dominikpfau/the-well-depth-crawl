@@ -30,7 +30,7 @@ from data import (
     LOCATION_DESCRIPTIONS, DETAIL_DESCRIPTIONS,
     LOCATION_TRAITS, DETAIL_TRAITS,
     TREASURE_TABLES, TREASURE_QUALITY_TABLE, TREASURE_EXTRA_ITEMS_TABLE,
-    SAFE_MUNDANE_CONTENTS,
+    SAFE_MUNDANE_CONTENTS, BULKY_TREASURE_TABLES,
     CONSUMABLE_SUBTYPES, AMPULES_TABLE, POTIONS_TABLE, MISCELLANY_TABLE, ARTIFACTS_TABLE,
     NEXT_LEVEL, ROLL_TWICE, MONSTERS, MONSTERS_WITHOUT_TREASURE, ENCOUNTER_TABLES,
 )
@@ -168,6 +168,37 @@ def generate_treasure(quality_mod=0, dungeon_level=1, forced_quality=None):
         "number_of_items": count + len(extra_items),
         "quality": quality,
         "item_list": item_list,
+    }
+
+
+def generate_bulky_treasure(quality_mod=0):
+    """
+    The dedicated generator for a "Bulky Treasure" detail's own
+    guaranteed find (see DETAIL_TRAITS' "guaranteed_treasure_source":
+    "bulky") - "something valuable that is hard to move... a lavish
+    piece of furniture, a huge ornate rug, or a musical instrument".
+    Rolls a quality tier the same way generate_treasure() does (so
+    wealth modifiers etc. apply the same way), but always resolves to
+    exactly one item straight off BULKY_TREASURE_TABLES' matching 1d6
+    table for that tier - no "extra items" layered on top the way
+    generate_treasure() does, since this is one large, singular
+    object, not a haul of several things.
+    """
+    raw_roll = random.randint(1, 6)
+    quality_roll = max(0, min(12, raw_roll + quality_mod))
+    _, quality = TREASURE_QUALITY_TABLE[quality_roll]
+
+    item_text = BULKY_TREASURE_TABLES[quality][random.randint(1, 6)]
+
+    return {
+        "quality_roll": quality_roll,
+        "quality_mod": quality_mod,
+        "raw_quality_roll": raw_roll,
+        "base_item_count": 1,
+        "extra_item_count": 0,
+        "number_of_items": 1,
+        "quality": quality,
+        "item_list": [{"id": 0, "text": item_text}],
     }
 
 
@@ -779,15 +810,38 @@ def _room_has_guaranteed_treasure(room) -> bool:
     """
     True if this room's location or detail has a trait meaning its
     treasure is simply sitting out in the open (e.g. "Treasure Pile",
-    "Portcullis") rather than something that has to be searched for.
-    Such treasure always turns up something - no DC check at all,
-    unlike the normal search-based roll (see roll_location_treasure).
+    "Portcullis", "Bulky Treasure") rather than something that has to
+    be searched for. Such treasure always turns up something - no DC
+    check at all, unlike the normal search-based roll (see
+    roll_location_treasure).
     """
     if room is None:
         return False
     loc_traits = LOCATION_TRAITS.get(room["location"], {})
     det_traits = DETAIL_TRAITS.get(room["detail"], {})
     return bool(loc_traits.get("guaranteed_treasure") or det_traits.get("guaranteed_treasure"))
+
+
+def _room_guaranteed_treasure_source(room) -> str:
+    """
+    Which generator this room's guaranteed treasure (see
+    _room_has_guaranteed_treasure - meaningless to call this without
+    checking that first) should come from - "bulky"
+    (generate_bulky_treasure(), e.g. "Bulky Treasure") or "normal"
+    (plain generate_treasure(), e.g. "Treasure Pile"/"Portcullis" -
+    also the default when a location/detail has guaranteed_treasure
+    but no explicit source of its own). See DETAIL_TRAITS'/
+    LOCATION_TRAITS' "guaranteed_treasure_source".
+    """
+    if room is None:
+        return "normal"
+    loc_traits = LOCATION_TRAITS.get(room["location"], {})
+    det_traits = DETAIL_TRAITS.get(room["detail"], {})
+    return (
+        loc_traits.get("guaranteed_treasure_source")
+        or det_traits.get("guaranteed_treasure_source")
+        or "normal"
+    )
 
 
 def _room_special_connection_kind(room):
@@ -1254,13 +1308,30 @@ def _generate_room(
             # the normal hidden-treasure search roll right below - a
             # room can have obvious treasure in plain view *and* a
             # separate stash still worth searching for.
-            generated = generate_treasure(
-                quality_mod=level_modifiers.get("wealth", 0),
-                dungeon_level=used_depth,
-            )
+            #
+            # "Bulky Treasure" is guaranteed the same way, but isn't
+            # ordinary portable loot - a piece of furniture or a rug
+            # doesn't belong on the same tables as coins and gems, so
+            # it comes from its own generator instead (see
+            # _room_guaranteed_treasure_source/generate_bulky_treasure)
+            # and its own "bulky" context/label ("Bulky Treasure"
+            # rather than "Lying in the open") - both are visible
+            # immediately either way, this is purely so the room card
+            # makes clear *which* guaranteed find this is, matching
+            # what the detail's own description calls it.
+            bulky = _room_guaranteed_treasure_source(room) == "bulky"
+            if bulky:
+                generated = generate_bulky_treasure(
+                    quality_mod=level_modifiers.get("wealth", 0),
+                )
+            else:
+                generated = generate_treasure(
+                    quality_mod=level_modifiers.get("wealth", 0),
+                    dungeon_level=used_depth,
+                )
             _renumber_items(generated)
             room["treasures"].append({
-                "context": "open",
+                "context": "bulky" if bulky else "open",
                 "raw_roll": None,
                 "mod": None,
                 "treasure_dc_before": None,
@@ -2498,6 +2569,7 @@ _TREASURE_CONTEXT_LABELS = {
     "monster": "Looted from the monsters",
     "crevice": "At the bottom of the crevice",
     "safe": "Inside the safe",
+    "bulky": "Bulky Treasure",
 }
 
 

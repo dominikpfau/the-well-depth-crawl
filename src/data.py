@@ -416,6 +416,18 @@ DETAIL_TRAITS = {
     # there in plain sight, not something that has to be found first.
     "Treasure Pile": {"guaranteed_treasure": True},
     "Portcullis": {"guaranteed_treasure": True},
+    # Same idea - "pick something from the treasure table... [it]
+    # can't take any other actions while moving" describes something
+    # sitting there in plain view too - but "guaranteed_treasure_source"
+    # points _generate_room at BULKY_TREASURE_TABLES (game.py's
+    # generate_bulky_treasure) instead of the normal treasure tables:
+    # a piece of furniture or a rug isn't the same kind of find as
+    # coins or gems, so it gets its own dedicated table instead of
+    # being picked from TREASURE_TABLES like Treasure Pile/Portcullis.
+    "Bulky Treasure": {
+        "guaranteed_treasure": True,
+        "guaranteed_treasure_source": "bulky",
+    },
     # Each of these lets the party move between rooms that aren't
     # directly connected in the normal Location Generator/Crawling
     # Mode sense - "lift" and "secret_passage" each form one fixed
@@ -651,6 +663,89 @@ SAFE_MUNDANE_CONTENTS = [
     "Tax records from a defunct administration",
     "Household inventory list, nothing on it worth anything now",
 ]
+
+# A "Bulky Treasure" detail's own guaranteed find (see DETAIL_TRAITS'
+# "guaranteed_treasure_source": "bulky" and game.py's
+# generate_bulky_treasure) - "something valuable that is hard to
+# move", per its own description - a lavish piece of furniture, a
+# huge rug, or a musical instrument are just examples there, not the
+# whole scope, hence the wider variety of large object types below
+# (chests, screens, cabinets, basins, thrones, a loom mid-weave, ...).
+# Deliberately its own small 1d6-per-quality-tier table rather than
+# TREASURE_TABLES' 1d20 ones - those are built for ordinary, portable
+# loot (coins, gems, small trinkets), not a single big, awkward
+# object. Always resolves to exactly one item (no "extra items" on
+# top, unlike normal treasure) - a haul is multiple things; this is
+# one large one.
+#
+# Follows the exact same material-per-tier convention TREASURE_TABLES
+# already uses - the point there (see that table's own items) is
+# being able to eyeball an item's worth straight from its material
+# without needing to know its tier: bronze/brass/copper at minor,
+# silver/iron/stone at moderate, gold/black-lead/cut-gems at
+# valuable, pitchblende/hornblende/rare-wood at excellent, fine woods
+# (boxwood/walnut/padauk/satinwood) paired with artistry/knowledge at
+# rare, and petrified wood/amber/coral/nacre/ivory at legendary -
+# these tables stay consistent with that so the same "read the
+# material, know the worth" logic still works for a bulky find.
+BULKY_TREASURE_TABLES = {
+    "mundane": {
+        1: "Rotted wooden trunk, lid warped shut, contents turned to dust",
+        2: "Threadbare woven rug, moth holes larger than intact patches",
+        3: "Cracked wash-basin stand, its bowl shattered",
+        4: "Splintered wooden bench, one leg missing entirely",
+        5: "Mildewed tapestry, its scene no longer recognizable",
+        6: "Collapsed loom, threads rotted to nothing",
+    },
+    "minor": {
+        1: "Oak chest bound in tarnished bronze, hinges still sound",
+        2: "Wall-mounted brass birdcage, perch long rusted through",
+        3: "Copper-footed washstand, basin dulled green with age",
+        4: "Bronze-studded wooden bench, seat worn smooth",
+        5: "Wool wall-hanging on a brass rod, faded hunting scene",
+        6: "Squat cedar cabinet, drawer pulls cast in brass",
+    },
+    "moderate": {
+        1: "Iron-banded traveling chest, lock long rusted open",
+        2: "Stone bench carved from a single slab of serpentine",
+        3: "Silver-inlaid wooden screen, one panel cracked",
+        4: "Iron birdcage on a wrought stand, door hanging loose",
+        5: "Alabaster wash-basin set into a stone pedestal",
+        6: "Woven rug dyed with lapis-blue and jasper-red thread",
+    },
+    "valuable": {
+        1: "Gilt-edged wardrobe, doors inlaid with a rare gemstone",
+        2: "Black-lead writing desk, drawers lined in velvet",
+        3: "Gold-footed banquet table, top scarred but sound",
+        4: "Gem-studded jewelry cabinet, mirrored doors intact",
+        5: "Woven silk rug bordered in gold thread",
+        6: "Gilded birdcage shaped like a miniature temple",
+    },
+    "excellent": {
+        1: "Rare-wood wardrobe with pitchblende hinge fittings",
+        2: "Hornblende-inlaid writing desk, surface cool to the touch",
+        3: "Carved wooden screen depicting a hunt, pitchblende accents",
+        4: "Wooden game table with a hornblende-ringed playing surface",
+        5: "Rare-wood cradle, polished smooth by generations of use",
+        6: "Pitchblende-studded armor stand, empty but well-kept",
+    },
+    "rare": {
+        1: "Boxwood writing desk, drawers full of blank fine paper",
+        2: "Burl walnut bookcase, shelves still lined with ledgers",
+        3: "Oil painting on a padauk-framed panel, a city skyline at dusk",
+        4: "Satinwood harpsichord, strings brittle but frame flawless",
+        5: "Porcelain wash-basin set atop a carved wooden stand",
+        6: "Embroidered tapestry loom, mid-weave, thread still strung",
+    },
+    "legendary": {
+        1: "Wardrobe of petrified ebony, doors inlaid with solid ivory",
+        2: "Banquet table of petrified oak, legs capped in gold",
+        3: "Coral-encrusted bathing basin, carved from a single stone block",
+        4: "Nacre-inlaid cabinet, every drawer a different oceanic scene",
+        5: "Ivory throne with an amber-studded backrest",
+        6: "Petrified rosewood organ, pipes tipped in ivory",
+    },
+}
 
 TREASURE_EXTRA_ITEMS_TABLE = {
     5: [{"category": "consumable", "amount": 1}],
