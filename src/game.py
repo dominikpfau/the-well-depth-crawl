@@ -1723,10 +1723,17 @@ def handle_action(
     own loot is even attempted, for both "check_encounter" and
     "generate_encounter".
 
-    `encounter_dc_form` / `treasure_dc_form` are the two DC fields in
-    the header (always present, any view) - like `depth_form`, they
-    let the person directly edit the shared running DC pools instead
-    of just watching them drift from rolls.
+    `encounter_dc_form` / `treasure_dc_form` are the two DC fields,
+    now shown per-view (Location gets both; Encounter/Treasure get
+    just their own one; Crawling Mode gets neither - it won't be
+    edited directly there much) rather than always present in the
+    header - like `depth_form`, they let the person directly edit the
+    shared running DC pools instead of just watching them drift from
+    rolls. Not being rendered in the current view just means "leave
+    it as-is" (same `None`-means-unchanged handling as everything
+    else here), so the two pools stay shared and continuous across
+    every view and Crawling Mode regardless of which of them
+    currently expose an input for them.
 
     `location_form` / `detail_form` are the Location Generator's two
     dropdowns for picking a specific location/detail by name instead
@@ -2891,6 +2898,8 @@ def _render_location_view():
     roll_encounter = SESSION.get("roll_encounter", True)
     forced_location = SESSION.get("forced_location")
     forced_detail = SESSION.get("forced_detail")
+    encounter_dc = SESSION.get("encounter_dc", DEFAULT_ENCOUNTER_DC)
+    treasure_dc = SESSION.get("treasure_dc", DEFAULT_TREASURE_DC)
 
     treasure_checked = "checked" if roll_treasure else ""
     encounter_checked = "checked" if roll_encounter else ""
@@ -2924,6 +2933,12 @@ def _render_location_view():
                 Roll for Encounter
             </label>
         </div>
+        <div class="form-row">
+            <label for="encounter-dc">Encounter DC:</label>
+            <input type="number" id="encounter-dc" name="encounter-dc" value="{encounter_dc}">
+            <label for="treasure-dc">Treasure DC:</label>
+            <input type="number" id="treasure-dc" name="treasure-dc" value="{treasure_dc}">
+        </div>
         <button type="button" class="primary-action" onclick="runAction('room')">
             Generate Location
         </button>
@@ -2949,6 +2964,7 @@ def _render_encounter_view():
     roll_treasure = SESSION.get("encounter_roll_treasure", True)
     level = SESSION.get("level")
     forced_monster = SESSION.get("forced_monster")
+    encounter_dc = SESSION.get("encounter_dc", DEFAULT_ENCOUNTER_DC)
     treasure_checked = "checked" if roll_treasure else ""
 
     monster_names = _monsters_in_level_table(level)
@@ -2966,6 +2982,10 @@ def _render_encounter_view():
                 <input type="checkbox" id="encounter-roll-treasure" {treasure_checked}>
                 Roll for Treasure
             </label>
+        </div>
+        <div class="form-row">
+            <label for="encounter-dc">Encounter DC:</label>
+            <input type="number" id="encounter-dc" name="encounter-dc" value="{encounter_dc}">
         </div>
         <button type="button" class="primary-action" onclick="runAction('check_encounter')">
             Roll for Encounter
@@ -3013,6 +3033,7 @@ def _render_treasure_view_result(result):
 def _render_treasure_view():
     treasure = SESSION.get("treasure")
     forced_quality = SESSION.get("forced_quality")
+    treasure_dc = SESSION.get("treasure_dc", DEFAULT_TREASURE_DC)
 
     controls = f"""
     <div class="section">
@@ -3021,6 +3042,10 @@ def _render_treasure_view():
             <select id="quality-select">
                 {_render_choice_options(_treasure_quality_names(), forced_quality)}
             </select>
+        </div>
+        <div class="form-row">
+            <label for="treasure-dc">Treasure DC:</label>
+            <input type="number" id="treasure-dc" name="treasure-dc" value="{treasure_dc}">
         </div>
         <button type="button" class="primary-action" onclick="runAction('check_treasure')">
             Roll for Treasure
@@ -3790,8 +3815,6 @@ _VIEWS = [
 def _render_header():
     level = SESSION.get("level")
     level_modifiers = SESSION.get("level_modifiers", {})
-    encounter_dc = SESSION.get("encounter_dc", DEFAULT_ENCOUNTER_DC)
-    treasure_dc = SESSION.get("treasure_dc", DEFAULT_TREASURE_DC)
 
     modifier_badges = _render_meta_badges(level_modifiers)
     modifiers_text = modifier_badges or "<em>none</em>"
@@ -3804,12 +3827,6 @@ def _render_header():
         </select>
     </div>
     <div class="meta-line">Modifiers: {modifiers_text}</div>
-    <div class="header-row">
-        <label for="encounter-dc">Encounter DC:</label>
-        <input type="number" id="encounter-dc" name="encounter-dc" value="{encounter_dc}">
-        <label for="treasure-dc">Treasure DC:</label>
-        <input type="number" id="treasure-dc" name="treasure-dc" value="{treasure_dc}">
-    </div>
     """
 
 

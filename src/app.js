@@ -39,9 +39,10 @@ function getCheckbox(id) {
 }
 
 function getIntFieldArg(id) {
-    // The Encounter DC / Treasure DC fields in the header are always
-    // present (any view), but guard the same way as getDepth() in
-    // case of an empty/invalid value - null means "don't touch it".
+    // The Encounter DC / Treasure DC fields now live per-view
+    // (Location/Encounter/Treasure - not shown at all in Crawling
+    // Mode), so unlike getDepth()'s single view this covers three -
+    // same null-safety either way: null means "don't touch it".
     const el = document.getElementById(id);
     if (!el || el.value === "") return null;
     const n = parseInt(el.value, 10);
