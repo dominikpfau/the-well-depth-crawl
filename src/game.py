@@ -286,7 +286,13 @@ def generate_extra_items(treasure_quality, dungeon_level):
     return items
 
 
-def roll_location_treasure(current_dc: int, mods: dict, dungeon_level=1, forced_quality=None) -> dict:
+def roll_location_treasure(current_dc: int, mods: dict, default_dc: int, dungeon_level=1, forced_quality=None) -> dict:
+    """
+    `default_dc` is what the DC pool resets to on a success (see
+    "next_dc" below) - the Settings view's "Default Treasure DC"
+    (SESSION["default_treasure_dc"]), passed in explicitly rather
+    than read from a module constant so it can be changed at runtime.
+    """
     if mods["no_treasure"]:
         return {
             "blocked": True,
@@ -315,7 +321,7 @@ def roll_location_treasure(current_dc: int, mods: dict, dungeon_level=1, forced_
             "mod": treasure_mod,
             "success": True,
             "treasure": treasure,
-            "next_dc": DEFAULT_TREASURE_DC,
+            "next_dc": default_dc,
         }
     else:
         reduction = max(0, math.ceil(roll / 2))
@@ -330,7 +336,9 @@ def roll_location_treasure(current_dc: int, mods: dict, dungeon_level=1, forced_
         }
 
 
-def roll_random_encounter(current_dc: int, mods: dict):
+def roll_random_encounter(current_dc: int, mods: dict, default_dc: int):
+    """Same idea as roll_location_treasure's own `default_dc` - the
+    Settings view's "Default Encounter DC"."""
     raw_roll = random.randint(1, 6)
     encounter_mod = mods["encounter_roll"]
     roll = raw_roll + encounter_mod
@@ -341,7 +349,7 @@ def roll_random_encounter(current_dc: int, mods: dict):
             "raw_roll": raw_roll,
             "mod": encounter_mod,
             "success": True,
-            "next_dc": DEFAULT_ENCOUNTER_DC,
+            "next_dc": default_dc,
         }
     else:
         reduction = max(0, math.ceil(roll / 2))
@@ -576,7 +584,7 @@ def _roll_encounter_groups_at(level: int, budget: _RollBudget) -> list:
         }]
 
 
-def roll_monster_treasure(monsters, level, level_modifiers, current_dc):
+def roll_monster_treasure(monsters, level, level_modifiers, current_dc, default_dc):
     """
     Rolls (against `current_dc` - the same running "treasure DC" a
     location's own treasure uses) whether an encountered monster
@@ -584,7 +592,9 @@ def roll_monster_treasure(monsters, level, level_modifiers, current_dc):
     level's modifiers (LEVEL_MODIFIERS "wealth") - deliberately *not*
     the location/detail modifiers a location's own treasure uses,
     since this loot belongs to the monster(s), not the place they
-    were found in.
+    were found in. `default_dc` is what current_dc resets to on a
+    success - see roll_location_treasure's own parameter of the same
+    name.
 
     Returns None if there's nothing to roll for at all (no encounter,
     or every monster present is in MONSTERS_WITHOUT_TREASURE - e.g. a
@@ -612,7 +622,7 @@ def roll_monster_treasure(monsters, level, level_modifiers, current_dc):
         "no_treasure": False,
     }
     raw_result = roll_location_treasure(
-        current_dc, mods, dungeon_level=level if level else 1
+        current_dc, mods, default_dc, dungeon_level=level if level else 1
     )
 
     # Normalize to the same shape room["treasure_result"] uses, so
@@ -627,7 +637,7 @@ def roll_monster_treasure(monsters, level, level_modifiers, current_dc):
     }
 
 
-def _roll_monster_treasure_if_enabled(monsters, level, level_modifiers, treasure_dc, enabled):
+def _roll_monster_treasure_if_enabled(monsters, level, level_modifiers, treasure_dc, default_treasure_dc, enabled):
     """
     Thin wrapper around roll_monster_treasure() for the two Encounter
     Generator actions ("check_encounter" and "generate_encounter"),
@@ -641,7 +651,7 @@ def _roll_monster_treasure_if_enabled(monsters, level, level_modifiers, treasure
     if not enabled:
         return None, treasure_dc
 
-    monster_treasure = roll_monster_treasure(monsters, level, level_modifiers, treasure_dc)
+    monster_treasure = roll_monster_treasure(monsters, level, level_modifiers, treasure_dc, default_treasure_dc)
     if monster_treasure is not None:
         treasure_dc = monster_treasure["next_dc"]
     return monster_treasure, treasure_dc
@@ -794,6 +804,8 @@ def _default_session() -> dict:
         "treasure": None,
         "treasure_dc": DEFAULT_TREASURE_DC,
         "encounter_dc": DEFAULT_ENCOUNTER_DC,
+        "default_treasure_dc": DEFAULT_TREASURE_DC,
+        "default_encounter_dc": DEFAULT_ENCOUNTER_DC,
         "encounter_check": None,
         "level": None,
         "level_modifiers": {},
@@ -1277,7 +1289,8 @@ def _room_ransack_choice(room):
 
 def _generate_room(
     used_depth, level, level_modifiers, roll_treasure, roll_encounter,
-    treasure_dc, encounter_dc, forced_location=None, forced_detail=None,
+    treasure_dc, encounter_dc, default_treasure_dc, default_encounter_dc,
+    forced_location=None, forced_detail=None,
 ):
     """
     Rolls a fresh location at `used_depth` - optionally its own
@@ -1286,6 +1299,11 @@ def _generate_room(
     roll_treasure/roll_encounter come from the person's checkboxes)
     and Crawling Mode's "go_deeper" (where both are always True - no
     checkboxes there).
+
+    `default_treasure_dc`/`default_encounter_dc` are what the two DC
+    pools reset to on a success (see roll_location_treasure/
+    roll_random_encounter's own `default_dc`) - the Settings view's
+    two "Default ... DC" fields.
 
     `forced_location` / `forced_detail`, if given, are used directly
     instead of rolling on LOCATIONS / DETAILS (the Location
@@ -1438,7 +1456,7 @@ def _generate_room(
 
         treasure_dc_before = treasure_dc
         treasure_check = roll_location_treasure(
-            treasure_dc, treasure_mods, dungeon_level=used_depth
+            treasure_dc, treasure_mods, default_treasure_dc, dungeon_level=used_depth
         )
         treasure_dc = treasure_check["next_dc"]
 
@@ -1557,7 +1575,7 @@ def _generate_room(
                 # part of generally searching the room.
                 safe_dc_before = treasure_dc
                 safe_check = roll_location_treasure(
-                    treasure_dc, treasure_mods, dungeon_level=used_depth
+                    treasure_dc, treasure_mods, default_treasure_dc, dungeon_level=used_depth
                 )
                 treasure_dc = safe_check["next_dc"]
 
@@ -1606,7 +1624,7 @@ def _generate_room(
         encounter_mods["encounter_roll"] += level_modifiers.get("population", 0)
 
         encounter_dc_before = encounter_dc
-        entering_check = roll_random_encounter(encounter_dc, encounter_mods)
+        entering_check = roll_random_encounter(encounter_dc, encounter_mods, default_encounter_dc)
         encounter_dc = entering_check["next_dc"]
 
         monsters = (
@@ -1635,7 +1653,7 @@ def _generate_room(
 
         if _CRAWLING_MONSTER_LOOT_ENABLED and roll_treasure and monsters:
             monster_treasure, treasure_dc = _roll_monster_treasure_if_enabled(
-                monsters, level, level_modifiers, treasure_dc, enabled=True
+                monsters, level, level_modifiers, treasure_dc, default_treasure_dc, enabled=True
             )
             if monster_treasure is not None:
                 _renumber_items(monster_treasure["found_treasure"])
@@ -1647,7 +1665,7 @@ def _generate_room(
 
 def _create_linked_room(
     crawl_history, source_room, target_depth, level, level_modifiers,
-    treasure_dc, encounter_dc,
+    treasure_dc, encounter_dc, default_treasure_dc, default_encounter_dc,
 ):
     """
     Generates a brand new room at `target_depth`, forced to have the
@@ -1670,7 +1688,8 @@ def _create_linked_room(
     """
     new_room, treasure_dc, encounter_dc = _generate_room(
         target_depth, level, level_modifiers, True, True,
-        treasure_dc, encounter_dc, forced_detail=source_room["detail"],
+        treasure_dc, encounter_dc, default_treasure_dc, default_encounter_dc,
+        forced_detail=source_room["detail"],
     )
     new_room["id"] = len(crawl_history)
     new_room["parent_id"] = None
@@ -1697,6 +1716,8 @@ def handle_action(
     room_form=None,
     entry_form=None,
     smash_amphoras_form=None,
+    default_encounter_dc_form=None,
+    default_treasure_dc_form=None,
 ):
     """
     Mirrors the POST branch of the original Flask route.
@@ -1724,16 +1745,25 @@ def handle_action(
     "generate_encounter".
 
     `encounter_dc_form` / `treasure_dc_form` are the two DC fields,
-    now shown per-view (Location gets both; Encounter/Treasure get
-    just their own one; Crawling Mode gets neither - it won't be
-    edited directly there much) rather than always present in the
-    header - like `depth_form`, they let the person directly edit the
-    shared running DC pools instead of just watching them drift from
-    rolls. Not being rendered in the current view just means "leave
-    it as-is" (same `None`-means-unchanged handling as everything
-    else here), so the two pools stay shared and continuous across
-    every view and Crawling Mode regardless of which of them
-    currently expose an input for them.
+    shown per-view (Location gets both; Encounter/Treasure get just
+    their own one; Crawling Mode gets neither - it won't be edited
+    directly there much) rather than always present in the header -
+    like `depth_form`, they let the person directly edit the shared
+    running DC pools instead of just watching them drift from rolls.
+    Not being rendered in the current view just means "leave it
+    as-is" (same `None`-means-unchanged handling as everything else
+    here), so the two pools stay shared and continuous across every
+    view and Crawling Mode regardless of which of them currently
+    expose an input for them.
+
+    `default_encounter_dc_form` / `default_treasure_dc_form` are the
+    Settings view's own two fields - what each pool above resets to
+    on a success (see roll_location_treasure/roll_random_encounter's
+    own `default_dc` parameter), instead of the fixed
+    DEFAULT_ENCOUNTER_DC/DEFAULT_TREASURE_DC constants every prior
+    version of this used unconditionally. "reset_settings" restores
+    both back to those original constants specifically - the
+    Settings view's own "Reset to Defaults" button.
 
     `location_form` / `detail_form` are the Location Generator's two
     dropdowns for picking a specific location/detail by name instead
@@ -1784,6 +1814,12 @@ def handle_action(
     depth = _resolve_int(depth_form, depth)
     encounter_dc = _resolve_int(encounter_dc_form, SESSION.get("encounter_dc", DEFAULT_ENCOUNTER_DC))
     treasure_dc = _resolve_int(treasure_dc_form, SESSION.get("treasure_dc", DEFAULT_TREASURE_DC))
+    default_encounter_dc = _resolve_int(
+        default_encounter_dc_form, SESSION.get("default_encounter_dc", DEFAULT_ENCOUNTER_DC)
+    )
+    default_treasure_dc = _resolve_int(
+        default_treasure_dc_form, SESSION.get("default_treasure_dc", DEFAULT_TREASURE_DC)
+    )
 
     roll_treasure = _resolve_bool(roll_treasure_form, SESSION.get("roll_treasure", True))
     roll_encounter = _resolve_bool(roll_encounter_form, SESSION.get("roll_encounter", True))
@@ -1800,7 +1836,7 @@ def handle_action(
         used_depth = depth
         room, treasure_dc, encounter_dc = _generate_room(
             used_depth, level, level_modifiers, roll_treasure, roll_encounter,
-            treasure_dc, encounter_dc,
+            treasure_dc, encounter_dc, default_treasure_dc, default_encounter_dc,
             forced_location=forced_location, forced_detail=forced_detail,
         )
         depth = used_depth + 1
@@ -1834,7 +1870,7 @@ def handle_action(
         if not _room_blocks_deeper(current_room):
             new_room, treasure_dc, encounter_dc = _generate_room(
                 crawl_depth, level, level_modifiers, True, True,
-                treasure_dc, encounter_dc,
+                treasure_dc, encounter_dc, default_treasure_dc, default_encounter_dc,
             )
             new_room["id"] = len(crawl_history)
             new_room["parent_id"] = crawl_current_id
@@ -2057,6 +2093,7 @@ def handle_action(
                 target_room, treasure_dc, encounter_dc = _create_linked_room(
                     crawl_history, current_room, target_depth,
                     level, level_modifiers, treasure_dc, encounter_dc,
+                    default_treasure_dc, default_encounter_dc,
                 )
             if target_room is not None:
                 crawl_current_id = target_room["id"]
@@ -2100,6 +2137,7 @@ def handle_action(
                     target_room, treasure_dc, encounter_dc = _create_linked_room(
                         crawl_history, current_room, target_depth,
                         level, level_modifiers, treasure_dc, encounter_dc,
+                        default_treasure_dc, default_encounter_dc,
                     )
                 # else: 2+ candidates but none chosen yet - the room
                 # card shows a dropdown; nothing happens until used.
@@ -2109,6 +2147,7 @@ def handle_action(
                 target_room, treasure_dc, encounter_dc = _create_linked_room(
                     crawl_history, current_room, target_depth,
                     level, level_modifiers, treasure_dc, encounter_dc,
+                    default_treasure_dc, default_encounter_dc,
                 )
 
             if target_room is not None:
@@ -2137,7 +2176,8 @@ def handle_action(
             if not candidates:
                 new_room, treasure_dc, encounter_dc = _generate_room(
                     current_room["used_depth"] + 1, level, level_modifiers, True, True,
-                    treasure_dc, encounter_dc, forced_detail="Fireplace",
+                    treasure_dc, encounter_dc, default_treasure_dc, default_encounter_dc,
+                    forced_detail="Fireplace",
                 )
                 new_room["id"] = len(crawl_history)
                 # No parent_id, same reasoning as _create_linked_room:
@@ -2170,7 +2210,7 @@ def handle_action(
         mods["encounter_roll"] += level_modifiers.get("population", 0)
 
         encounter_dc_before = encounter_dc
-        check = roll_random_encounter(encounter_dc, mods)
+        check = roll_random_encounter(encounter_dc, mods, default_encounter_dc)
         encounter_dc = check["next_dc"]
 
         monsters = (
@@ -2179,7 +2219,7 @@ def handle_action(
             else None
         )
         monster_treasure, treasure_dc = _roll_monster_treasure_if_enabled(
-            monsters, level, level_modifiers, treasure_dc, encounter_roll_treasure
+            monsters, level, level_modifiers, treasure_dc, default_treasure_dc, encounter_roll_treasure
         )
 
         encounter_check = {
@@ -2202,7 +2242,7 @@ def handle_action(
         # treasure roll though, same as everywhere else.
         monsters = roll_encounter_group(level if level else 1, forced_monster=forced_monster)
         monster_treasure, treasure_dc = _roll_monster_treasure_if_enabled(
-            monsters, level, level_modifiers, treasure_dc, encounter_roll_treasure
+            monsters, level, level_modifiers, treasure_dc, default_treasure_dc, encounter_roll_treasure
         )
 
         encounter_check = {
@@ -2230,7 +2270,7 @@ def handle_action(
         }
         treasure_dc_before = treasure_dc
         check = roll_location_treasure(
-            treasure_dc, mods, dungeon_level=level if level else 1,
+            treasure_dc, mods, default_treasure_dc, dungeon_level=level if level else 1,
             forced_quality=forced_quality,
         )
         treasure_dc = check["next_dc"]
@@ -2263,8 +2303,18 @@ def handle_action(
         }
 
     elif action == "switch_view":
-        if view_form in ("location", "encounter", "treasure", "crawling"):
+        if view_form in ("location", "encounter", "treasure", "crawling", "settings"):
             active_view = view_form
+
+    elif action == "reset_settings":
+        # The Settings view's own "Reset to Defaults" - restores just
+        # the two "Default ... DC" fields back to their original,
+        # hardcoded values. Deliberately narrower than "reset" above:
+        # this doesn't touch the actual in-progress dungeon (crawl_
+        # history, the live treasure_dc/encounter_dc pools, generated
+        # rooms, ...) at all, only the settings themselves.
+        default_encounter_dc = DEFAULT_ENCOUNTER_DC
+        default_treasure_dc = DEFAULT_TREASURE_DC
 
     elif action == "reset":
         SESSION = _default_session()
@@ -2280,6 +2330,8 @@ def handle_action(
         "treasure": treasure,
         "treasure_dc": treasure_dc,
         "encounter_dc": encounter_dc,
+        "default_treasure_dc": default_treasure_dc,
+        "default_encounter_dc": default_encounter_dc,
         "encounter_check": encounter_check,
         "level": level,
         "level_modifiers": level_modifiers,
@@ -3804,11 +3856,53 @@ def _render_crawling_view():
 # HEADER / SIDEBAR NAVIGATION
 # ----------------------------
 
+def _render_settings_view():
+    """
+    Global, cross-view settings - currently just the two "Default ...
+    DC" fields (see roll_location_treasure/roll_random_encounter's
+    own `default_dc` parameter: what the shared treasure_dc/
+    encounter_dc pools reset to on a success, instead of always the
+    fixed DEFAULT_TREASURE_DC/DEFAULT_ENCOUNTER_DC constants). Takes
+    effect immediately, same as every other input in this app - no
+    separate "Save" step.
+
+    "Reset to Defaults" (the "reset_settings" action) only touches
+    these two fields, back to their original hardcoded values -
+    deliberately not the same as the "reset" action Crawling Mode
+    uses, which wipes the entire in-progress dungeon. Settings are
+    meant to persist across that kind of reset, not be reset by it.
+    """
+    default_encounter_dc = SESSION.get("default_encounter_dc", DEFAULT_ENCOUNTER_DC)
+    default_treasure_dc = SESSION.get("default_treasure_dc", DEFAULT_TREASURE_DC)
+
+    return f"""
+    <div class="section">
+        <div class="form-row">
+            <label for="default-encounter-dc">Default Encounter DC:</label>
+            <input type="number" id="default-encounter-dc" name="default-encounter-dc"
+                   value="{default_encounter_dc}">
+        </div>
+        <div class="form-row">
+            <label for="default-treasure-dc">Default Treasure DC:</label>
+            <input type="number" id="default-treasure-dc" name="default-treasure-dc"
+                   value="{default_treasure_dc}">
+        </div>
+        <div class="meta-line">
+            What the Encounter DC / Treasure DC pools reset to after a success.
+        </div>
+        <button type="button" onclick="runAction('reset_settings')">
+            Reset to Defaults
+        </button>
+    </div>
+    """
+
+
 _VIEWS = [
     ("crawling", "Crawling Mode"),
     ("location", "Location Generator"),
     ("encounter", "Encounter Generator"),
     ("treasure", "Treasure Generator"),
+    ("settings", "Settings"),
 ]
 
 
@@ -3853,6 +3947,7 @@ _VIEW_RENDERERS = {
     "encounter": _render_encounter_view,
     "treasure": _render_treasure_view,
     "crawling": _render_crawling_view,
+    "settings": _render_settings_view,
 }
 
 

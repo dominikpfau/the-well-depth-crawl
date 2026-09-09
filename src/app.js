@@ -82,7 +82,9 @@ async function dispatch(action, view, roomId, entryId) {
             getSelectField("quality-select"),
             roomId == null ? null : String(roomId),
             entryId == null ? null : String(entryId),
-            getCheckbox("smash-amphoras")
+            getCheckbox("smash-amphoras"),
+            getIntFieldArg("default-encounter-dc"),
+            getIntFieldArg("default-treasure-dc")
         );
         renderApp();
     } catch (err) {
