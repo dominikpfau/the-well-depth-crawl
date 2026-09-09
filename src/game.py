@@ -1882,24 +1882,44 @@ def handle_action(
             crawl_viewed_id = None  # show the newly-entered room, not whatever was being viewed
 
     elif action == "go_back":
-        # Moves focus to the room the current one was reached from -
-        # a no-op if there's no history yet, we're already at the
-        # very first room (no parent to go back to), or this room's
-        # own connection to its parent has been blocked (see
-        # "toggle_connection"). Doesn't touch crawl_history at all -
-        # that room is still there, just no longer the "current" one.
-        # crawl_depth is reset to right after the parent room, so a
-        # subsequent "go_deeper" branches off from there rather than
-        # continuing from however deep the abandoned path had gotten.
+        # Moves focus to whatever the current room opens onto: its
+        # parent for a normal room, same as before - but a depth-0
+        # room has no parent_id at all (it's always a root; see
+        # _render_dungeon_map's Grand Avenue docstring paragraph), so
+        # for one of those, "back" means the Grand Avenue itself
+        # (crawl_current_id -> None, crawl_depth -> 0) rather than a
+        # no-op. A root NOT at depth 0 (a Lift/Secret Passage landing
+        # elsewhere) still has nothing to go back to - it was never
+        # connected to the Avenue in the first place, just floating
+        # on its own - so that case is unchanged.
+        #
+        # Doesn't touch crawl_history at all either way - the room
+        # (or the whole dungeon, from the Avenue) is still there,
+        # just no longer "current".
         current_room = _room_by_id(crawl_history, crawl_current_id)
         if (
             current_room is not None
             and current_room["parent_id"] is not None
             and not current_room.get("connection_blocked")
         ):
+            # crawl_depth resets to right after the parent room, so a
+            # subsequent "go_deeper" branches off from there rather
+            # than continuing from however deep the abandoned path
+            # had gotten.
             parent_room = _room_by_id(crawl_history, current_room["parent_id"])
             crawl_current_id = current_room["parent_id"]
             crawl_depth = parent_room["used_depth"] + 1
+            crawl_viewed_id = None
+        elif (
+            current_room is not None
+            and current_room["parent_id"] is None
+            and current_room["used_depth"] == 0
+        ):
+            # Same idea, one level further up: crawl_depth resets to
+            # 0, so a subsequent "go_deeper" digs a brand new depth-0
+            # entrance rather than continuing this one.
+            crawl_current_id = None
+            crawl_depth = 0
             crawl_viewed_id = None
 
     elif action == "view_room":
@@ -3200,9 +3220,18 @@ def _build_children_map(history):
 
 def _is_adjacent_room(room_id, current_id, history):
     """
-    True if `room_id` is a direct neighbor of the current room - its
-    parent, or one of its direct children - AND the connection
+    True if `room_id` is a direct neighbor of the current position -
+    its parent, or one of its direct children - AND the connection
     between them hasn't been blocked (see "toggle_connection").
+
+    `current_id` of None means "standing at the Grand Avenue" (see
+    _render_dungeon_map's docstring) rather than "no current room" -
+    every depth-0 room is a direct neighbor of the Avenue, the same
+    way it's a direct neighbor of its own parent, so all of them
+    count as adjacent to it. (There's no "connection_blocked" check
+    for this case - that flag can only ever be set on a room with a
+    parent_id, i.e. never on a root; see "toggle_connection".)
+
     Determines when the Crawling Mode room card's "Go Here" button
     appears: viewing any room is always fine, but actually moving
     there is only offered (and only allowed, by handle_action's
@@ -3210,11 +3239,17 @@ def _is_adjacent_room(room_id, current_id, history):
     reach "Go Back"/"Go Deeper" have, just onto a room that already
     exists.
     """
-    if room_id is None or current_id is None or room_id == current_id:
+    if room_id is None:
         return False
     room = _room_by_id(history, room_id)
+    if room is None:
+        return False
+    if current_id is None:
+        return room["used_depth"] == 0
+    if room_id == current_id:
+        return False
     current_room = _room_by_id(history, current_id)
-    if room is None or current_room is None:
+    if current_room is None:
         return False
     if room["parent_id"] == current_id:
         return not room.get("connection_blocked")
@@ -3228,6 +3263,21 @@ _TREE_COL_WIDTH = 150
 _TREE_ROW_HEIGHT = 64
 _TREE_NODE_WIDTH = 132
 _TREE_NODE_HEIGHT = 40
+
+# The Grand Avenue - lore-wise (see HANDOFF.md), the long main tunnel
+# of a level of The Well, which every depth-0 location branches off
+# from and therefore always opens back onto. Purely a map decoration:
+# a thin strip added below the shallowest row, with a short stub down
+# to it from every depth-0 room. _AVENUE_COLOR is a warm, muted sand
+# tone chosen to read as "daylight/the way out" while staying clearly
+# distinct from every other color already in the map - the amber
+# accent (current/path), the viewed outline's blue, the warning red,
+# the full Lift/Secret Passage/Fireplace badge palette, and the
+# monster/treasure badge colors (see _render_dungeon_map's docstring
+# for the full existing list this was checked against).
+_AVENUE_SECTION_HEIGHT = 34
+_AVENUE_LINE_GAP = 10
+_AVENUE_COLOR = "#c2a878"
 
 
 def _build_visible_tree(room, children_map, path_ids):
@@ -3349,6 +3399,19 @@ def _render_dungeon_map(history, current_id, viewed_id=None):
     known coordinates via an SVG overlay. None of this depends on a
     browser auto-centering nested boxes of differing width, which is
     what caused rooms to drift sideways in an earlier version.
+
+    Since used_depth 0 always renders at the bottom row (the smallest
+    used_depth gets the largest cy - see `center()` below), a thin
+    "Grand Avenue" strip is drawn below that row, with a short stub
+    connecting every depth-0 room down to it - see the constants
+    above and the block just before the final `return` for how. A
+    depth-0 room is always a root (a normal "go_deeper" child's
+    used_depth is always its parent's plus one, so it can never be 0
+    unless its parent were at depth -1, which never happens), so this
+    only ever needs to check `roots`, not every room in the flattened
+    tree. Like Fireplace's network, nothing is stored on the room
+    dict for this - it's recomputed fresh from used_depth every
+    render.
     """
     if not history:
         return ""
@@ -3382,6 +3445,17 @@ def _render_dungeon_map(history, current_id, viewed_id=None):
 
     canvas_width = (max_x + 1) * _TREE_COL_WIDTH
     canvas_height = (max_used_depth - min_used_depth + 1) * _TREE_ROW_HEIGHT
+
+    # See the Grand Avenue paragraph in this function's docstring -
+    # every depth-0 root gets a stub down to a shared strip, so extend
+    # the canvas by just enough to fit it (only if a depth-0 room is
+    # actually present at all - always true for an in-progress crawl,
+    # since the very first room generated is always used_depth 0 and
+    # is never removed from history, but a defensive check costs
+    # nothing).
+    depth0_root_ids = {r["id"] for r in roots if r["used_depth"] == 0}
+    if depth0_root_ids:
+        canvas_height += _AVENUE_SECTION_HEIGHT
 
     def center(entry):
         cx = entry["x"] * _TREE_COL_WIDTH + _TREE_COL_WIDTH / 2
@@ -3496,6 +3570,48 @@ def _render_dungeon_map(history, current_id, viewed_id=None):
                 f'x2="{mark_x + r:.1f}" y2="{mark_y - r:.1f}" '
                 f'stroke="#b71c1c" stroke-width="2.5" stroke-linecap="round" />'
             )
+
+    # The Grand Avenue strip itself, plus a short stub from every
+    # depth-0 room down to it - see this function's docstring. Drawn
+    # after the normal parent-child connectors so it doesn't get
+    # visually buried under them, but it's a thin, dashed, muted line
+    # deliberately kept far enough below the last room row that it
+    # can't be mistaken for one.
+    avenue_label_html = ""
+    if depth0_root_ids:
+        depth0_entries = [
+            entry for entry in flat
+            if not entry["node"]["is_more"] and entry["node"]["room"]["id"] in depth0_root_ids
+        ]
+        avenue_y = canvas_height - _AVENUE_SECTION_HEIGHT + _AVENUE_LINE_GAP
+        xs = [center(entry)[0] for entry in depth0_entries]
+        pad = _TREE_NODE_WIDTH / 2 + 12
+        avenue_x1 = max(0.0, min(xs) - pad)
+        avenue_x2 = min(canvas_width, max(xs) + pad)
+
+        lines.append(
+            f'<line x1="{avenue_x1:.1f}" y1="{avenue_y:.1f}" x2="{avenue_x2:.1f}" y2="{avenue_y:.1f}" '
+            f'stroke="{_AVENUE_COLOR}" stroke-width="2" stroke-linecap="round" '
+            f'stroke-dasharray="1,4" opacity="0.65">'
+            f'<title>The Grand Avenue - the main tunnel of this level, and a way out of the dungeon.</title>'
+            f'</line>'
+        )
+        for entry in depth0_entries:
+            cx, cy = center(entry)
+            y_box_bottom = cy + _TREE_NODE_HEIGHT / 2
+            lines.append(
+                f'<line x1="{cx:.1f}" y1="{y_box_bottom:.1f}" x2="{cx:.1f}" y2="{avenue_y:.1f}" '
+                f'stroke="{_AVENUE_COLOR}" stroke-width="1.5" stroke-dasharray="1,3" opacity="0.55">'
+                f'<title>Opens onto the Grand Avenue - a way out of the dungeon.</title>'
+                f'</line>'
+            )
+
+        label_cx = (avenue_x1 + avenue_x2) / 2
+        avenue_label_html = (
+            f'<div class="dtree-avenue-label" style="left:{label_cx:.1f}px; top:{avenue_y + 6:.1f}px;" '
+            f'title="The main tunnel of this level of The Well - every depth 0 location opens onto it.">'
+            f'Grand Avenue</div>'
+        )
 
     boxes = []
     badges_html = []
@@ -3670,6 +3786,7 @@ def _render_dungeon_map(history, current_id, viewed_id=None):
                 </svg>
                 {''.join(boxes)}
                 {''.join(badges_html)}
+                {avenue_label_html}
             </div>
         </div>
     </div>
@@ -3752,24 +3869,42 @@ def _render_crawling_view():
     depth = SESSION.get("crawl_depth", 0)
 
     current_room = _room_by_id(history, current_id)
-    has_parent = bool(current_room and current_room["parent_id"] is not None)
+
+    # "Go Back" steps up to whatever the current room opens onto: its
+    # parent for a normal room (unchanged) - or, since every depth-0
+    # room is a root that opens directly onto the Grand Avenue (see
+    # _render_dungeon_map's docstring), the Avenue itself for one of
+    # those. Standing at the Avenue already (current_room is None)
+    # has nothing further back to go to - same as the very first room
+    # used to be, before the Avenue exted this far back. A root NOT
+    # at depth 0 (a Lift/Secret Passage landing elsewhere) isn't
+    # connected to the Avenue either - it's just floating on its own.
     entrance_blocked = bool(current_room and current_room.get("connection_blocked"))
-    can_go_back = has_parent and not entrance_blocked
-    go_back_disabled = "" if can_go_back else "disabled"
-    if not has_parent:
-        go_back_title = "No previous room to go back to"
-    elif entrance_blocked:
-        go_back_title = "The entrance to this room is blocked - you can't go back this way"
+    if current_room is None:
+        can_go_back = False
+        go_back_title = "You're already at the Grand Avenue"
+    elif current_room["parent_id"] is not None:
+        can_go_back = not entrance_blocked
+        go_back_title = (
+            "The entrance to this room is blocked - you can't go back this way"
+            if entrance_blocked else "Go back to the previous room"
+        )
+    elif current_room["used_depth"] == 0:
+        can_go_back = True
+        go_back_title = "Go back to the Grand Avenue"
     else:
-        go_back_title = "Go back to the previous room"
+        can_go_back = False
+        go_back_title = "No previous room to go back to"
+    go_back_disabled = "" if can_go_back else "disabled"
 
     blocks_deeper = _room_blocks_deeper(current_room)
     go_deeper_disabled = "disabled" if blocks_deeper else ""
-    go_deeper_title = (
-        "This is a dead end - there's no way to go deeper from here"
-        if blocks_deeper
-        else "Descend to a new location"
-    )
+    if blocks_deeper:
+        go_deeper_title = "This is a dead end - there's no way to go deeper from here"
+    elif current_room is None:
+        go_deeper_title = "Dig a new entrance into the dungeon from the Grand Avenue"
+    else:
+        go_deeper_title = "Descend to a new location"
 
     controls = f"""
     <div class="section">
@@ -3788,69 +3923,106 @@ def _render_crawling_view():
     </div>
     """
 
-    if not current_room:
+    if not history:
+        # A genuinely fresh session - nothing generated at all yet,
+        # not even a first entrance. Still the Grand Avenue (there's
+        # nowhere else to start from - see the docstring on
+        # _render_dungeon_map), just with no dungeon behind it yet to
+        # show a map of, and no existing entrance to offer stepping
+        # back into - see the "with history" wording just below,
+        # which this is deliberately kept in the same voice as.
         return controls + (
             '<div class="section">'
-            "<em>Press 'Go Deeper' to descend into the dungeon.</em>"
+            "<em>You're standing on the Grand Avenue. Press 'Go Deeper' to dig "
+            "your first entrance into the dungeon.</em>"
             "</div>"
         )
-
-    # A room is "fresh" (just generated, rolls still shown) only if
-    # it's the most recently created room across the whole history -
-    # i.e. nothing has been generated after it yet. Revisiting it
-    # later via "Go Back" naturally makes it non-fresh, and going
-    # deeper again from it (a new branch) creates a new room that
-    # takes over as the fresh one. Only meaningful when actually
-    # viewing the current position - see is_current_position below.
-    is_fresh = current_room["id"] == len(history) - 1
 
     # Whichever room was last clicked in the Dungeon Map (or the
     # current room itself, if nothing was clicked / after moving -
     # see handle_action resetting crawl_viewed_id on every move).
+    # While standing at the Avenue (current_room is None) with
+    # nothing clicked yet, there's no sensible room to default to, so
+    # `viewed_room` stays None and no card is shown - just the map.
     viewed_id = SESSION.get("crawl_viewed_id")
     if viewed_id is None:
         viewed_id = current_id
     viewed_room = _room_by_id(history, viewed_id) or current_room
-    is_current_position = viewed_room["id"] == current_id
 
-    go_here_html = ""
-    if not is_current_position and _is_adjacent_room(viewed_room["id"], current_id, history):
-        go_here_html = (
-            f'<button type="button" class="go-here-button" '
-            f'onclick="enterRoom({viewed_room["id"]})">Go Here</button>'
+    avenue_note_html = ""
+    if current_room is None:
+        avenue_note_html = (
+            '<div class="section">'
+            "<em>You're standing on the Grand Avenue. Press 'Go Deeper' to dig a "
+            "new entrance into the dungeon, or pick an existing depth 0 location "
+            "on the map below to step back into it.</em>"
+            "</div>"
         )
 
-    toggle_connection_html = ""
-    if viewed_room["parent_id"] is not None:
-        # Available on any room with a parent - including the current
-        # position itself (e.g. blocking your own way back), not just
-        # while merely viewing some other room.
-        toggle_label = "Unblock Entrance" if viewed_room.get("connection_blocked") else "Block Entrance"
-        toggle_connection_html = (
-            f'<button type="button" class="go-here-button" '
-            f'onclick="toggleConnection({viewed_room["id"]})">{toggle_label}</button>'
-        )
+    room_card_html = ""
+    if viewed_room is not None:
+        is_current_position = viewed_room["id"] == current_id
 
-    # Lift / Secret Passage / Fireplace - only usable while actually
-    # standing in the room (the backend action reads crawl_current_id,
-    # not whatever's merely being viewed), never while just looking at
-    # one via the Dungeon Map.
-    special_connection_html = ""
-    if is_current_position:
-        special_connection_html = _render_special_connection_controls(viewed_room, history)
+        # A room is "fresh" (just generated, rolls still shown) only
+        # if it's the most recently created room across the whole
+        # history - i.e. nothing has been generated after it yet.
+        # Revisiting it later via "Go Back" naturally makes it
+        # non-fresh, and going deeper again from it (a new branch, or
+        # a new entrance from the Avenue) creates a new room that
+        # takes over as the fresh one. Only actually read by
+        # _render_crawl_entry_full when is_current_position is True -
+        # see that function's own docstring - so it doesn't matter
+        # which room this is computed against otherwise.
+        is_fresh = viewed_room["id"] == len(history) - 1
 
-    current_card = f"""
-    <div class="section">
-        <div class="crawl-history">
-            {_render_crawl_entry_full(
-                viewed_room, is_current_position, is_fresh,
-                go_here_html + toggle_connection_html + special_connection_html,
-            )}
+        go_here_html = ""
+        if not is_current_position and _is_adjacent_room(viewed_room["id"], current_id, history):
+            go_here_html = (
+                f'<button type="button" class="go-here-button" '
+                f'onclick="enterRoom({viewed_room["id"]})">Go Here</button>'
+            )
+
+        toggle_connection_html = ""
+        if viewed_room["parent_id"] is not None:
+            # Available on any room with a parent - including the
+            # current position itself (e.g. blocking your own way
+            # back), not just while merely viewing some other room.
+            # A root (parent_id None) has no toggle at all - its only
+            # connection is either to nothing, or to the Grand
+            # Avenue, and that one isn't blockable (yet).
+            toggle_label = "Unblock Entrance" if viewed_room.get("connection_blocked") else "Block Entrance"
+            toggle_connection_html = (
+                f'<button type="button" class="go-here-button" '
+                f'onclick="toggleConnection({viewed_room["id"]})">{toggle_label}</button>'
+            )
+
+        # Lift / Secret Passage / Fireplace - only usable while
+        # actually standing in the room (the backend action reads
+        # crawl_current_id, not whatever's merely being viewed),
+        # never while just looking at one via the Dungeon Map (and
+        # never while standing at the Avenue, since is_current_position
+        # is always False there - current_id is None, and no room's
+        # id ever equals that).
+        special_connection_html = ""
+        if is_current_position:
+            special_connection_html = _render_special_connection_controls(viewed_room, history)
+
+        room_card_html = f"""
+        <div class="section">
+            <div class="crawl-history">
+                {_render_crawl_entry_full(
+                    viewed_room, is_current_position, is_fresh,
+                    go_here_html + toggle_connection_html + special_connection_html,
+                )}
+            </div>
         </div>
-    </div>
-    """
+        """
 
-    return controls + current_card + _render_dungeon_map(history, current_id, viewed_room["id"])
+    viewed_id_for_map = viewed_room["id"] if viewed_room is not None else None
+    return (
+        controls + avenue_note_html + room_card_html
+        + _render_dungeon_map(history, current_id, viewed_id_for_map)
+    )
 
 
 # ----------------------------

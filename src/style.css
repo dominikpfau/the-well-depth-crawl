@@ -617,6 +617,24 @@
         color: #999999;
     }
 
+    /* The Grand Avenue label (see _AVENUE_COLOR / _render_dungeon_map
+       in game.py) - centered under its strip via the inline `left`
+       plus this transform, since the label's own width isn't known
+       in Python the way every other positioned element on this
+       canvas is. Kept deliberately quiet (small, italic, muted,
+       non-interactive) - a lore nicety on the map, not something
+       competing for attention with the actual rooms. */
+    .dtree-avenue-label {
+        position: absolute;
+        transform: translateX(-50%);
+        font-size: 0.68rem;
+        font-style: italic;
+        color: #9c8a68;
+        white-space: nowrap;
+        letter-spacing: 0.02em;
+        pointer-events: none;
+    }
+
     /* ------------------------
        Mobile
        ------------------------ */
