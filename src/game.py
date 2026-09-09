@@ -118,7 +118,7 @@ def collect_modifiers(room: dict | None, trigger: str) -> dict:
         else:
             mods["treasure_quality"] += val
 
-        # ENCOUNTER ROLL (no blocking in your ruleset)
+        # ENCOUNTER ROLL (nothing ever blocks a positive encounter_roll modifier)
         mods["encounter_roll"] += source.get("encounter_roll", 0)
 
     return mods
@@ -1287,6 +1287,36 @@ def _room_ransack_choice(room):
     return DETAIL_TRAITS.get(room["detail"], {}).get("ransack_choice")
 
 
+def _roll_flat_chance_treasure(context, generate_fn):
+    """
+    Shared by "crevice" and "pickaxe" (see DETAIL_TRAITS'/LOCATION_
+    TRAITS' "extra_treasure_context") - both are a flat 1-in-3
+    chance, no DC check at all, always visible immediately (you can
+    see the crevice/ore vein just by being in the room, no search
+    needed). The entry is added either way, hit or miss - a default-
+    visible, chance-based context still needs its own labeled group
+    in the UI even when it turns up nothing, the same way a fresh
+    "ransack" roll does; silently omitting the entry on a miss would
+    make an already-generated, empty one look identical to a room
+    that never had one to check in the first place.
+
+    `generate_fn` is a zero-arg callable performing the actual roll
+    on a hit, already bound to whichever generator/quality_mod/
+    dungeon_level the caller needs. Ids are *not* renumbered here -
+    the caller still has to do that against the rest of the room's
+    treasures (see _generate_room's own `_renumber_items`).
+    """
+    found = generate_fn() if random.randint(1, 3) == 1 else None
+    return {
+        "context": context,
+        "raw_roll": None,
+        "mod": None,
+        "treasure_dc_before": None,
+        "found_treasure": found,
+        "blocked": False,
+    }
+
+
 def _generate_room(
     used_depth, level, level_modifiers, roll_treasure, roll_encounter,
     treasure_dc, encounter_dc, default_treasure_dc, default_encounter_dc,
@@ -1485,51 +1515,31 @@ def _generate_room(
 
         for extra_traits in _room_extra_treasure_traits(room):
             extra_context = extra_traits["extra_treasure_context"]
+            quality_mod = level_modifiers.get("wealth", 0)
+
             if extra_context == "crevice":
-                # A flat 1-in-3 chance, no DC check involved at all
-                # (the description just says "1 in 3 chance", not
-                # "roll against the treasure DC") - and, if it hits,
-                # an unconditional roll on the treasure table, same
-                # as "open"/guaranteed_treasure above. Also visible
-                # immediately like "open", not gated behind
-                # "ransacked" - you can already see the crevice (and
-                # whatever's visible at the bottom of it) just by
-                # being in the room, no search action needed. The
-                # entry is added either way, hit or miss - a default-
-                # visible, chance-based context (as opposed to
-                # "open"'s unconditional find) still needs its own
-                # labeled group in the UI even when it turns up
-                # nothing, the same way a fresh "ransack" roll does;
-                # silently omitting the entry on a miss would make an
-                # already-generated, empty crevice look identical to
-                # a room that never had one to check in the first
-                # place.
-                generated = None
-                if random.randint(1, 3) == 1:
-                    generated = generate_treasure(
-                        quality_mod=level_modifiers.get("wealth", 0),
-                        dungeon_level=used_depth,
-                    )
-                    _renumber_items(generated)
-                room["treasures"].append({
-                    "context": "crevice",
-                    "raw_roll": None,
-                    "mod": None,
-                    "treasure_dc_before": None,
-                    "found_treasure": generated,
-                    "blocked": False,
-                })
+                # Something visible at the bottom of the gap, same
+                # idea as "open"/guaranteed_treasure above (an
+                # unconditional roll on the treasure table), just
+                # chance-based instead of guaranteed - see
+                # _roll_flat_chance_treasure's own docstring for the
+                # full "why always add the entry" reasoning.
+                entry = _roll_flat_chance_treasure(
+                    "crevice",
+                    lambda: generate_treasure(quality_mod=quality_mod, dungeon_level=used_depth),
+                )
+                if entry["found_treasure"]:
+                    _renumber_items(entry["found_treasure"])
+                room["treasures"].append(entry)
+
             elif extra_context == "pickaxe":
                 # "Mine"/"Public Rock Garden" locations - same flat
-                # 1-in-3, no-DC, visible-immediately, added-either-way
-                # mechanic as "crevice" above (see its comment for the
-                # full reasoning) - just a different thing you can see
-                # is there without searching (an ore vein/mineral
-                # deposit rather than something at the bottom of a
-                # gap), and its own context/label so the room card is
-                # clear about which is which. Both locations share
-                # this one context, but "extra_treasure_source" (on
-                # the same traits dict the context itself came from)
+                # 1-in-3 mechanic as "crevice" above, just a different
+                # thing you can see is there without searching (an
+                # ore vein/mineral deposit rather than something at
+                # the bottom of a gap). Both locations share this one
+                # context/label, but "extra_treasure_source" (on the
+                # same traits dict the context itself came from)
                 # points at each one's own dedicated table
                 # (MINE_TREASURE_TABLES/ROCK_GARDEN_TREASURE_TABLES) -
                 # a vein of ore and an ornamental crystal cluster are
@@ -1543,27 +1553,19 @@ def _generate_room(
                 # here, same as the note about halving brute-force
                 # rolls on a "Safe" isn't encoded as a real mechanic
                 # either.
-                generated = None
-                if random.randint(1, 3) == 1:
-                    source = extra_traits.get("extra_treasure_source")
-                    quality_mod = level_modifiers.get("wealth", 0)
-                    if source == "mine":
-                        generated = generate_mine_treasure(quality_mod=quality_mod)
-                    elif source == "rock_garden":
-                        generated = generate_rock_garden_treasure(quality_mod=quality_mod)
-                    else:
-                        generated = generate_treasure(
-                            quality_mod=quality_mod, dungeon_level=used_depth,
-                        )
-                    _renumber_items(generated)
-                room["treasures"].append({
-                    "context": "pickaxe",
-                    "raw_roll": None,
-                    "mod": None,
-                    "treasure_dc_before": None,
-                    "found_treasure": generated,
-                    "blocked": False,
-                })
+                source = extra_traits.get("extra_treasure_source")
+                if source == "mine":
+                    generate_fn = lambda: generate_mine_treasure(quality_mod=quality_mod)
+                elif source == "rock_garden":
+                    generate_fn = lambda: generate_rock_garden_treasure(quality_mod=quality_mod)
+                else:
+                    generate_fn = lambda: generate_treasure(quality_mod=quality_mod, dungeon_level=used_depth)
+
+                entry = _roll_flat_chance_treasure("pickaxe", generate_fn)
+                if entry["found_treasure"]:
+                    _renumber_items(entry["found_treasure"])
+                room["treasures"].append(entry)
+
             elif extra_context == "safe":
                 # "roll for treasure as if ransacking the location" - the
                 # exact same DC-gated mechanic (and the exact same shared
@@ -2379,6 +2381,13 @@ def _render_choice_options(names, current_value):
     return "\n".join(parts)
 
 
+def _render_getting_started_placeholder(text):
+    """The "nothing generated yet" section shown below a standalone
+    generator's controls (Location/Encounter/Treasure) before its
+    first result exists."""
+    return f'<div class="section"><em>{text}</em></div>'
+
+
 def _monsters_in_level_table(level):
     """
     All distinct monster names that can appear on `level`'s encounter
@@ -2998,10 +3007,8 @@ def _render_location_view():
     """
 
     if not room:
-        return controls + (
-            '<div class="section">'
-            "<em>Press 'Generate Location' to generate a new location.</em>"
-            "</div>"
+        return controls + _render_getting_started_placeholder(
+            "Press 'Generate Location' to generate a new location."
         )
 
     return controls + f"""
@@ -3049,11 +3056,8 @@ def _render_encounter_view():
     """
 
     if not result:
-        return controls + (
-            '<div class="section"><em>'
-            "Press 'Roll for Encounter' or 'Generate Encounter' above "
-            "to get started."
-            '</em></div>'
+        return controls + _render_getting_started_placeholder(
+            "Press 'Roll for Encounter' or 'Generate Encounter' above to get started."
         )
 
     return controls + f"""
@@ -3109,11 +3113,8 @@ def _render_treasure_view():
     """
 
     if not treasure:
-        return controls + (
-            '<div class="section"><em>'
-            "Press 'Roll for Treasure' or 'Generate Treasure' above "
-            "to get started."
-            "</em></div>"
+        return controls + _render_getting_started_placeholder(
+            "Press 'Roll for Treasure' or 'Generate Treasure' above to get started."
         )
 
     return controls + f"""
