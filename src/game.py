@@ -817,6 +817,8 @@ def _default_session() -> dict:
         "forced_detail": None,
         "forced_monster": None,
         "forced_quality": None,
+        "show_roll_details": False,
+        "show_treasure_quality": False,
     }
 
 
@@ -1720,6 +1722,8 @@ def handle_action(
     smash_amphoras_form=None,
     default_encounter_dc_form=None,
     default_treasure_dc_form=None,
+    show_roll_details_form=None,
+    show_treasure_quality_form=None,
 ):
     """
     Mirrors the POST branch of the original Flask route.
@@ -1797,6 +1801,32 @@ def handle_action(
     Ransack Room is clicked (see DETAIL_TRAITS' "ransack_choice" and
     _room_ransack_choice). Ignored entirely for a room whose detail
     doesn't have a ransack_choice in the first place.
+
+    `show_roll_details_form` is the Settings view's own "Show Roll
+    Details" checkbox - a global, cross-view display preference (see
+    _show_roll_details), off by default, rather than something tied
+    to any one action. When off, every roll display in the UI
+    (Location/Detail's small badges, a Quality roll, a Search roll,
+    an Encounter roll, the count-breakdown formula behind a monster
+    group) collapses to its plain "what it produced" form - the same
+    fallback already used for a revisited Crawling Mode room - instead
+    of the raw numbers, modifiers, and DC comparisons behind it.
+    Doesn't affect anything else - what a room/encounter/treasure
+    actually turned out to be is unchanged, only whether the dice
+    behind it are shown.
+
+    `show_treasure_quality_form` is the Settings view's own "Show
+    Treasure Quality" checkbox - another global, cross-view display
+    preference (see _show_treasure_quality), also off by default and
+    independent of `show_roll_details_form`. When off, a treasure's
+    quality tier name (mundane/minor/moderate/valuable/excellent/
+    rare/legendary - see TREASURE_QUALITY_TABLE) is never shown,
+    regardless of the roll-details setting - and neither is the item
+    count that goes with it, since that count is framed as "what this
+    tier produced" rather than a fact worth stating on its own; the
+    items themselves are still listed either way. When on, whether
+    the *roll* behind that tier is also shown still depends on
+    `show_roll_details_form` separately.
     """
     global SESSION
 
@@ -1827,6 +1857,12 @@ def handle_action(
     roll_encounter = _resolve_bool(roll_encounter_form, SESSION.get("roll_encounter", True))
     encounter_roll_treasure = _resolve_bool(
         encounter_roll_treasure_form, SESSION.get("encounter_roll_treasure", True)
+    )
+    show_roll_details = _resolve_bool(
+        show_roll_details_form, SESSION.get("show_roll_details", False)
+    )
+    show_treasure_quality = _resolve_bool(
+        show_treasure_quality_form, SESSION.get("show_treasure_quality", False)
     )
 
     forced_location = _resolve_choice(location_form, SESSION.get("forced_location"))
@@ -2329,14 +2365,18 @@ def handle_action(
             active_view = view_form
 
     elif action == "reset_settings":
-        # The Settings view's own "Reset to Defaults" - restores just
-        # the two "Default ... DC" fields back to their original,
-        # hardcoded values. Deliberately narrower than "reset" above:
-        # this doesn't touch the actual in-progress dungeon (crawl_
-        # history, the live treasure_dc/encounter_dc pools, generated
-        # rooms, ...) at all, only the settings themselves.
+        # The Settings view's own "Reset to Defaults" - restores
+        # every Settings-view field (both "Default ... DC" fields,
+        # "Show Roll Details", "Show Treasure Quality") back to its
+        # original, hardcoded default. Deliberately narrower than
+        # "reset" above: this doesn't touch the actual in-progress
+        # dungeon (crawl_history, the live treasure_dc/encounter_dc
+        # pools, generated rooms, ...) at all, only the settings
+        # themselves.
         default_encounter_dc = DEFAULT_ENCOUNTER_DC
         default_treasure_dc = DEFAULT_TREASURE_DC
+        show_roll_details = False
+        show_treasure_quality = False
 
     elif action == "reset":
         SESSION = _default_session()
@@ -2365,6 +2405,8 @@ def handle_action(
         "forced_detail": forced_detail,
         "forced_monster": forced_monster,
         "forced_quality": forced_quality,
+        "show_roll_details": show_roll_details,
+        "show_treasure_quality": show_treasure_quality,
     }
 
 
@@ -2483,7 +2525,20 @@ def _pluralize(count, singular, plural=None):
     return f"{count} {singular if count == 1 else plural}"
 
 
-def _render_quality_summary(treasure):
+def _with_optional_lead_line(line_html, body_html):
+    """
+    Joins an optional lead line (e.g. a Quality line that may have
+    been suppressed entirely by _show_treasure_quality) with whatever
+    comes after it - omitting the `<br><br>` separator too when
+    there's no lead line, rather than leaving a stray blank gap above
+    the body.
+    """
+    if not line_html:
+        return body_html
+    return f"{line_html}<br><br>{body_html}"
+
+
+def _render_quality_summary(treasure, show_quality=True):
     """
     Just "Quality: X, N items" - no roll/formula info at all. Used
     when revisiting an older Crawling Mode room via "Go Back" (the
@@ -2497,14 +2552,23 @@ def _render_quality_summary(treasure):
     as the same kind of secondary, supporting detail either way
     instead of competing with the actual item text listed right below
     it for attention.
+
+    `show_quality=False` (see _show_treasure_quality) drops this
+    whole line, not just the tier name - the item count is presented
+    here specifically as "how many things this quality tier rolled
+    up", so showing it without the tier it belongs to reads as an odd
+    half-answer. The item list right below still shows regardless -
+    this is only ever the framing line above it.
     """
+    if not show_quality:
+        return ""
     count_phrase = _pluralize(treasure["base_item_count"], "item")
     if treasure["extra_item_count"] > 0:
         count_phrase += f' + {_pluralize(treasure["extra_item_count"], "extra")}'
     return f'Quality: <span class="meta-badge">{treasure["quality"]}, {count_phrase}</span>'
 
 
-def _render_quality_roll_line(treasure):
+def _render_quality_roll_line(treasure, show_quality=True):
     """
     Quality tier and item count both fall out of one roll, indexed
     into TREASURE_QUALITY_TABLE (see generate_treasure()). Same
@@ -2518,7 +2582,20 @@ def _render_quality_roll_line(treasure):
     (paint, consumables, artifacts, ... from generate_extra_items())
     come from separate rolls, so they're called out separately rather
     than folded into one "number of items".
+
+    `show_quality=False` (see _show_treasure_quality) drops this
+    whole line - not just the tier name, and not just the roll, but
+    the item count with it too (see _render_quality_summary's own
+    docstring for why: the count is framed as "what this tier
+    produced", not a fact worth stating on its own). A "Quality roll:
+    ... \u2192 ???" line with the outcome blanked out would also be
+    worse than no line at all, since the raw roll number alone can
+    still leak which tier it landed on to anyone who knows
+    TREASURE_QUALITY_TABLE.
     """
+    if not show_quality:
+        return ""
+
     count_phrase = _pluralize(treasure["base_item_count"], "item")
     if treasure["extra_item_count"] > 0:
         count_phrase += f' + {_pluralize(treasure["extra_item_count"], "extra")}'
@@ -2542,7 +2619,7 @@ def _render_quality_roll_line(treasure):
 
 def _render_treasure_check_result(
     result, fail_message="There doesn't seem to be anything of value here.",
-    show_roll=True, room_id=None, interactive=False,
+    show_roll=True, show_quality=True, room_id=None, interactive=False,
 ):
     """
     `result["success"]`, if explicitly set, overrides found_treasure's
@@ -2553,6 +2630,10 @@ def _render_treasure_check_result(
     would otherwise make a failed safe check display as a "Success".
     Every other context leaves this key unset, so the badge falls
     back to the old bool(found) behavior - unaffected.
+
+    `show_quality` (see _show_treasure_quality) is independent of
+    `show_roll` - passed straight down to whichever of
+    _render_quality_roll_line/_render_quality_summary ends up used.
     """
     if result.get("blocked"):
         return "<em>No treasure can be found here.</em>"
@@ -2576,9 +2657,9 @@ def _render_treasure_check_result(
     # regardless of show_roll/freshness - there's no roll to frame.
     if not show_roll or result.get("raw_roll") is None:
         if found:
-            return (
-                f'{_render_quality_summary(found)}<br><br>'
-                f'{_render_item_list(found["item_list"], room_id=room_id, interactive=interactive)}'
+            return _with_optional_lead_line(
+                _render_quality_summary(found, show_quality=show_quality),
+                _render_item_list(found["item_list"], room_id=room_id, interactive=interactive),
             )
         return f"<em>{fail_message}</em>"
 
@@ -2595,9 +2676,9 @@ def _render_treasure_check_result(
     )
 
     if found:
-        html += (
-            f'{_render_quality_roll_line(found)}<br><br>'
-            f'{_render_item_list(found["item_list"], room_id=room_id, interactive=interactive)}'
+        html += _with_optional_lead_line(
+            _render_quality_roll_line(found, show_quality=show_quality),
+            _render_item_list(found["item_list"], room_id=room_id, interactive=interactive),
         )
     else:
         html += f"<em>{fail_message}</em>"
@@ -2655,7 +2736,7 @@ def _render_monster_lines(monsters, show_rolls=True, room_id=None, interactive=F
     return "<br>".join(lines)
 
 
-def _render_encounter_treasure(result, show_rolls=True, room_id=None, interactive=False):
+def _render_encounter_treasure(result, show_rolls=True, show_quality=True, room_id=None, interactive=False):
     """`result` is a roll_monster_treasure()-shaped dict, or None if
     every monster present is one that never carries treasure."""
     if result is None:
@@ -2667,11 +2748,11 @@ def _render_encounter_treasure(result, show_rolls=True, room_id=None, interactiv
     return f"""
     <hr>
     <strong>Treasure:</strong><br>
-    {_render_treasure_check_result(result, show_roll=show_rolls, room_id=room_id, interactive=interactive)}
+    {_render_treasure_check_result(result, show_roll=show_rolls, show_quality=show_quality, room_id=room_id, interactive=interactive)}
     """
 
 
-def _render_encounter_result(result, show_treasure=True, show_rolls=True, room_id=None, interactive=False):
+def _render_encounter_result(result, show_treasure=True, show_rolls=True, show_quality=True, room_id=None, interactive=False):
     """
     Renders one encounter-check result - shared between a location's
     own "entering encounter" and the standalone Encounter Generator
@@ -2689,6 +2770,11 @@ def _render_encounter_result(result, show_treasure=True, show_rolls=True, room_i
     when revisiting an older Crawling Mode room via "Go Back": what's
     in the room is still shown, but the dice that produced it (back
     when it was first generated) aren't re-litigated every time.
+
+    `show_quality` (see _show_treasure_quality) is forwarded into
+    _render_encounter_treasure the same way, independent of
+    `show_rolls` - a monster group's own loot follows the same
+    Quality-display rule as any other treasure.
 
     `result["mode"] == "generated"` (from "generate_encounter") skips
     the "Search/Encounter roll: ... vs DC ..." framing entirely too, since no check
@@ -2715,7 +2801,8 @@ def _render_encounter_result(result, show_treasure=True, show_rolls=True, room_i
             )
             treasure_html = (
                 _render_encounter_treasure(
-                    result["treasure"], show_rolls=show_rolls, room_id=room_id, interactive=interactive
+                    result["treasure"], show_rolls=show_rolls, show_quality=show_quality,
+                    room_id=room_id, interactive=interactive,
                 )
                 if show_treasure else ""
             )
@@ -2742,7 +2829,9 @@ def _render_encounter_result(result, show_treasure=True, show_rolls=True, room_i
     if result["success"] and result["monsters"] and result["monsters"]["groups"]:
         body = _render_monster_lines(result["monsters"], room_id=room_id, interactive=interactive)
         treasure_html = (
-            _render_encounter_treasure(result["treasure"], room_id=room_id, interactive=interactive)
+            _render_encounter_treasure(
+                result["treasure"], show_quality=show_quality, room_id=room_id, interactive=interactive
+            )
             if show_treasure else ""
         )
     elif groups_now_empty:
@@ -2812,7 +2901,7 @@ _TREASURE_CONTEXT_LABELS = {
 }
 
 
-def _render_room_treasures(room, show_rolls, room_id, interactive):
+def _render_room_treasures(room, show_rolls, show_quality, room_id, interactive):
     """
     Renders every entry in room["treasures"], each under its own
     small context label (see _TREASURE_CONTEXT_LABELS) - a room can
@@ -2886,7 +2975,7 @@ def _render_room_treasures(room, show_rolls, room_id, interactive):
             )
         else:
             body = _render_treasure_check_result(
-                entry, show_roll=show_rolls, room_id=room_id, interactive=interactive
+                entry, show_roll=show_rolls, show_quality=show_quality, room_id=room_id, interactive=interactive
             )
 
         blocks.append(
@@ -2899,7 +2988,7 @@ def _render_room_treasures(room, show_rolls, room_id, interactive):
     return "".join(blocks)
 
 
-def _render_room_card(room, show_rolls=True, status_note="", status_extra_html="", room_id=None):
+def _render_room_card(room, show_rolls=True, show_quality=True, status_note="", status_extra_html="", room_id=None):
     """
     Renders a room's Location/Detail title, how it was determined,
     both descriptions, and (if present) its Encounter/Treasure
@@ -2912,6 +3001,11 @@ def _render_room_card(room, show_rolls=True, status_note="", status_extra_html="
     the roll (or "chosen" note) that produced them demoted to a small
     meta-badge underneath, rather than a bare roll number sitting in
     front of the name itself.
+
+    `show_quality` (see _show_treasure_quality) is forwarded into
+    _render_room_treasures/_render_encounter_result independent of
+    `show_rolls` - whether a treasure's quality tier is named is its
+    own setting, not tied to whether the roll behind it is shown.
 
     `status_note`, if given (Crawling Mode's "You are here" / "You
     are here (revisited)" / "Viewing only"), is folded into the same
@@ -2949,11 +3043,11 @@ def _render_room_card(room, show_rolls=True, status_note="", status_extra_html="
         entering_html = f"""
         <hr>
         <strong>Encounter:</strong><br>
-        {_render_encounter_result(room["entering_encounter"], show_treasure=False, show_rolls=show_rolls, room_id=room_id, interactive=interactive)}
+        {_render_encounter_result(room["entering_encounter"], show_treasure=False, show_rolls=show_rolls, show_quality=show_quality, room_id=room_id, interactive=interactive)}
         """
 
     treasure_html = ""
-    treasures_body = _render_room_treasures(room, show_rolls, room_id, interactive)
+    treasures_body = _render_room_treasures(room, show_rolls, show_quality, room_id, interactive)
     if treasures_body:
         treasure_html = f"""
         <hr>
@@ -2970,6 +3064,50 @@ def _render_room_card(room, show_rolls=True, status_note="", status_extra_html="
     {entering_html}
     {treasure_html}
     """
+
+
+def _show_roll_details() -> bool:
+    """
+    The Settings view's global "Show Roll Details" toggle - whether
+    roll displays (raw roll, modifier, total, DC, outcome) render at
+    all anywhere in the UI, independent of any per-room freshness
+    logic. Off by default (see _default_session) - a first-time user
+    sees clean "what it produced" results; the raw dice are opt-in.
+    Every top-level view reads this once and passes it down as that
+    view's own `show_rolls`/`show_roll` argument - the actual hiding
+    logic (falling back to a plain "what it produced" summary)
+    already exists throughout the rendering functions for the
+    Crawling Mode "revisited room" case; this just becomes another,
+    global reason for that same fallback to kick in.
+    """
+    return bool(SESSION.get("show_roll_details", False))
+
+
+def _show_treasure_quality() -> bool:
+    """
+    The Settings view's global "Show Treasure Quality" toggle -
+    whether a treasure's quality tier name (mundane/minor/moderate/
+    valuable/excellent/rare/legendary - see TREASURE_QUALITY_TABLE)
+    is shown at all, anywhere in the UI. Off by default (see
+    _default_session), same reasoning as _show_roll_details - clean
+    results by default, the tier name is opt-in.
+
+    Deliberately independent of _show_roll_details: whether the tier
+    name is shown and whether the roll that produced it is shown are
+    two separate questions. When this is off, the item count that
+    normally accompanies the tier name is dropped along with it (see
+    _render_quality_summary's own docstring for why) - the item list
+    itself is unaffected either way, only the framing line above it.
+    When this is off, _render_quality_roll_line drops the roll
+    entirely too (not just the tier name) rather than showing a roll
+    with its own outcome blanked out, since the raw number alone
+    could still leak the tier to anyone who knows the table.
+
+    Every top-level view reads this once and passes it down as that
+    view's own `show_quality` argument, the same way _show_roll_details
+    does for `show_rolls`.
+    """
+    return bool(SESSION.get("show_treasure_quality", False))
 
 
 def _render_location_view():
@@ -3033,7 +3171,7 @@ def _render_location_view():
 
     return controls + f"""
     <div class="section">
-        {_render_room_card(room, show_rolls=True)}
+        {_render_room_card(room, show_rolls=_show_roll_details(), show_quality=_show_treasure_quality())}
     </div>
     """
 
@@ -3082,27 +3220,37 @@ def _render_encounter_view():
 
     return controls + f"""
     <div class="section">
-        {_render_encounter_result(result)}
+        {_render_encounter_result(result, show_rolls=_show_roll_details(), show_quality=_show_treasure_quality())}
     </div>
     """
 
 
-def _render_treasure_view_result(result):
+def _render_treasure_view_result(result, show_rolls=True, show_quality=True):
     """
     Renders the standalone Treasure Generator's current result -
     either a DC-gated "Roll for Treasure" outcome (can fail) or an
     unconditional "Generate Treasure" one (always finds something, no
     DC framing) - mirrors _render_encounter_result's "generated" mode.
+
+    `show_rolls=False` (see _show_roll_details) drops the Quality
+    roll's own formula down to the plain "Quality: X, N items"
+    summary, same fallback _render_quality_summary already provides
+    for a revisited Crawling Mode room - and is threaded into the
+    DC-gated branch's own `show_roll` the same way.
+
+    `show_quality` (see _show_treasure_quality) is independent of
+    `show_rolls` - threaded into both branches the same way.
     """
     if result.get("mode") == "generated":
         found = result["found_treasure"]
-        return f"""
-        {_render_quality_roll_line(found)}<br><br>
-        {_render_item_list(found['item_list'])}
-        """
+        quality_line = (
+            _render_quality_roll_line(found, show_quality=show_quality) if show_rolls
+            else _render_quality_summary(found, show_quality=show_quality)
+        )
+        return _with_optional_lead_line(quality_line, _render_item_list(found["item_list"]))
 
     return _render_treasure_check_result(
-        result, fail_message="Nothing turns up this time."
+        result, fail_message="Nothing turns up this time.", show_roll=show_rolls, show_quality=show_quality
     )
 
 
@@ -3139,7 +3287,7 @@ def _render_treasure_view():
 
     return controls + f"""
     <div class="section">
-        {_render_treasure_view_result(treasure)}
+        {_render_treasure_view_result(treasure, show_rolls=_show_roll_details(), show_quality=_show_treasure_quality())}
     </div>
     """
 
@@ -3152,20 +3300,30 @@ def _render_crawl_entry_full(room, is_current_position, is_fresh, extra_buttons_
     - The actual current position: highlighted border, "You are here"
       (or "... (revisited)" if it wasn't just generated), and rolls
       shown only when it's the freshest room in the whole history
-      (see _render_crawling_view's is_fresh).
+      (see _render_crawling_view's is_fresh) AND the global "Show
+      Roll Details" setting is on (see _show_roll_details) - either
+      one being false hides them.
     - Any other room someone clicked in the Dungeon Map just to look
       at: plain styling, "Viewing only" instead of "You are here", no
       rolls (same as revisiting).
+
+    Treasure quality (see _show_treasure_quality) is NOT tied to
+    freshness the way rolls are - it's shown (or not) purely based on
+    that global setting, for the current position and any other room
+    alike. Unlike a roll, a treasure's quality tier isn't "dice being
+    re-litigated" when shown for an older room; it's a static fact
+    about what's there, the same as the item list right below it.
 
     `extra_buttons_html` (e.g. "Go Here" / "Block Entrance") is placed
     right after that status note either way - which buttons actually
     apply (some, like "Go Here", only make sense for a room other
     than the current position) is decided by the caller, not here.
     """
+    show_quality = _show_treasure_quality()
     if is_current_position:
         card_class = "crawl-entry-current"
         status_note = "You are here" + ("" if is_fresh else " (revisited)")
-        show_rolls = is_fresh
+        show_rolls = is_fresh and _show_roll_details()
     else:
         card_class = "crawl-entry-viewing"
         status_note = "Viewing only"
@@ -3173,7 +3331,7 @@ def _render_crawl_entry_full(room, is_current_position, is_fresh, extra_buttons_
 
     return f"""
     <div class="{card_class}">
-        {_render_room_card(room, show_rolls=show_rolls, status_note=status_note, status_extra_html=extra_buttons_html, room_id=room["id"])}
+        {_render_room_card(room, show_rolls=show_rolls, show_quality=show_quality, status_note=status_note, status_extra_html=extra_buttons_html, room_id=room["id"])}
     </div>
     """
 
@@ -3866,7 +4024,6 @@ def _render_special_connection_controls(room, history):
 def _render_crawling_view():
     history = SESSION.get("crawl_history", [])
     current_id = SESSION.get("crawl_current_id")
-    depth = SESSION.get("crawl_depth", 0)
 
     current_room = _room_by_id(history, current_id)
 
@@ -3908,7 +4065,10 @@ def _render_crawling_view():
 
     controls = f"""
     <div class="section">
-        <div class="meta-line">Current Depth: {depth}</div>
+        <div class="meta-line">{
+            "You are at the Grand Avenue" if current_room is None
+            else f"You are at Depth {current_room['used_depth']}"
+        }</div>
         <div class="button-row">
             <button type="button" {go_back_disabled} title="{go_back_title}" onclick="runAction('go_back')">
                 Go Back
@@ -4031,39 +4191,71 @@ def _render_crawling_view():
 
 def _render_settings_view():
     """
-    Global, cross-view settings - currently just the two "Default ...
-    DC" fields (see roll_location_treasure/roll_random_encounter's
-    own `default_dc` parameter: what the shared treasure_dc/
-    encounter_dc pools reset to on a success, instead of always the
-    fixed DEFAULT_TREASURE_DC/DEFAULT_ENCOUNTER_DC constants). Takes
-    effect immediately, same as every other input in this app - no
-    separate "Save" step.
+    Global, cross-view settings: the two "Default ... DC" fields (see
+    roll_location_treasure/roll_random_encounter's own `default_dc`
+    parameter - what the shared treasure_dc/encounter_dc pools reset
+    to on a success), "Show Roll Details" (see _show_roll_details -
+    whether roll displays render at all anywhere in the UI, or
+    collapse to their plain "what it produced" form), and "Show
+    Treasure Quality" (see _show_treasure_quality - whether a
+    treasure's quality tier name is shown at all, independent of the
+    roll-details setting). Explanations live in each field's own
+    `title` tooltip rather than a permanent line of text underneath,
+    to keep this view scannable as more settings get added here.
 
-    "Reset to Defaults" (the "reset_settings" action) only touches
-    these two fields, back to their original hardcoded values -
-    deliberately not the same as the "reset" action Crawling Mode
-    uses, which wipes the entire in-progress dungeon. Settings are
-    meant to persist across that kind of reset, not be reset by it.
+    All four take effect immediately, same as every other input in
+    this app - no separate "Save" step. Unlike the DC fields (only
+    read the next time some other action fires - nothing watches
+    them), both checkboxes have their own onchange so toggling either
+    alone re-renders the page right away, the same way the Level
+    dropdown's onLevelChange() does - the whole point of these
+    settings is to see their effect immediately, not on the next
+    unrelated click.
+
+    "Reset to Defaults" (the "reset_settings" action) restores every
+    field on this page - all Settings-view fields, and only those -
+    to its original hardcoded default. Deliberately narrower than the
+    "reset" action Crawling Mode uses, which wipes the entire
+    in-progress dungeon: settings are meant to persist across that
+    kind of reset, not be reset by it.
     """
     default_encounter_dc = SESSION.get("default_encounter_dc", DEFAULT_ENCOUNTER_DC)
     default_treasure_dc = SESSION.get("default_treasure_dc", DEFAULT_TREASURE_DC)
+    show_roll_details_checked = "checked" if _show_roll_details() else ""
+    show_treasure_quality_checked = "checked" if _show_treasure_quality() else ""
 
     return f"""
     <div class="section">
         <div class="form-row">
-            <label for="default-encounter-dc">Default Encounter DC:</label>
+            <label for="default-encounter-dc" title="What the Encounter DC pool resets to after a success.">
+                Default Encounter DC:
+            </label>
             <input type="number" id="default-encounter-dc" name="default-encounter-dc"
                    value="{default_encounter_dc}">
         </div>
         <div class="form-row">
-            <label for="default-treasure-dc">Default Treasure DC:</label>
+            <label for="default-treasure-dc" title="What the Treasure DC pool resets to after a success.">
+                Default Treasure DC:
+            </label>
             <input type="number" id="default-treasure-dc" name="default-treasure-dc"
                    value="{default_treasure_dc}">
         </div>
-        <div class="meta-line">
-            What the Encounter DC / Treasure DC pools reset to after a success.
+        <div class="form-row checkbox-row">
+            <label title="When off, rolled numbers, modifiers, and DC comparisons are hidden throughout the app - only what they produced is still shown.">
+                <input type="checkbox" id="show-roll-details" {show_roll_details_checked}
+                       onchange="onSettingsChange()">
+                Show Roll Details
+            </label>
         </div>
-        <button type="button" onclick="runAction('reset_settings')">
+        <div class="form-row checkbox-row">
+            <label title="When off, a treasure's quality tier (mundane, minor, moderate, valuable, excellent, rare, legendary) and its item count are hidden - only the items themselves are still shown.">
+                <input type="checkbox" id="show-treasure-quality" {show_treasure_quality_checked}
+                       onchange="onSettingsChange()">
+                Show Treasure Quality
+            </label>
+        </div>
+        <button type="button" title="Restores every setting above to its original default."
+                onclick="runAction('reset_settings')">
             Reset to Defaults
         </button>
     </div>

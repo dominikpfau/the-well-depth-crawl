@@ -84,7 +84,9 @@ async function dispatch(action, view, roomId, entryId) {
             entryId == null ? null : String(entryId),
             getCheckbox("smash-amphoras"),
             getIntFieldArg("default-encounter-dc"),
-            getIntFieldArg("default-treasure-dc")
+            getIntFieldArg("default-treasure-dc"),
+            getCheckbox("show-roll-details"),
+            getCheckbox("show-treasure-quality")
         );
         renderApp();
     } catch (err) {
@@ -97,6 +99,15 @@ async function runAction(action) {
 }
 
 async function onLevelChange() {
+    return dispatch(null, null, null);
+}
+
+async function onSettingsChange() {
+    // Same idea as onLevelChange(): a settings checkbox has no
+    // "generate/roll" button of its own to piggyback a re-render on,
+    // so it triggers one directly - the point of a display toggle
+    // like "Show Roll Details" is to see its effect immediately, not
+    // wait for some unrelated next action.
     return dispatch(null, null, null);
 }
 
