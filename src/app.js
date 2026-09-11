@@ -86,7 +86,8 @@ async function dispatch(action, view, roomId, entryId) {
             getIntFieldArg("default-encounter-dc"),
             getIntFieldArg("default-treasure-dc"),
             getCheckbox("show-roll-details"),
-            getCheckbox("show-treasure-quality")
+            getCheckbox("show-treasure-quality"),
+            getIntFieldArg("round-length-minutes")
         );
         renderApp();
     } catch (err) {

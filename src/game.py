@@ -40,6 +40,7 @@ Table = list[tuple[int, str]]
 
 DEFAULT_TREASURE_DC = 8
 DEFAULT_ENCOUNTER_DC = 8
+DEFAULT_ROUND_LENGTH_MINUTES = 15
 
 
 # ----------------------------
@@ -801,6 +802,8 @@ def _default_session() -> dict:
         "crawl_history": [],
         "crawl_current_id": None,
         "crawl_viewed_id": None,
+        "crawl_elapsed_minutes": 0,
+        "round_length_minutes": DEFAULT_ROUND_LENGTH_MINUTES,
         "treasure": None,
         "treasure_dc": DEFAULT_TREASURE_DC,
         "encounter_dc": DEFAULT_ENCOUNTER_DC,
@@ -1724,6 +1727,7 @@ def handle_action(
     default_treasure_dc_form=None,
     show_roll_details_form=None,
     show_treasure_quality_form=None,
+    round_length_minutes_form=None,
 ):
     """
     Mirrors the POST branch of the original Flask route.
@@ -1827,6 +1831,14 @@ def handle_action(
     items themselves are still listed either way. When on, whether
     the *roll* behind that tier is also shown still depends on
     `show_roll_details_form` separately.
+
+    `round_length_minutes_form` is the Settings view's own "Crawling
+    Round Length" field - how many minutes of in-fiction time one
+    "round" of Crawling Mode represents (default
+    DEFAULT_ROUND_LENGTH_MINUTES). Doesn't advance the clock by
+    itself - see crawl_elapsed_minutes below for what does - just
+    sets how big each advance is going forward. Changing it doesn't
+    retroactively rescale time already elapsed.
     """
     global SESSION
 
@@ -1836,6 +1848,7 @@ def handle_action(
     crawl_history = list(SESSION.get("crawl_history", []))
     crawl_current_id = SESSION.get("crawl_current_id")
     crawl_viewed_id = SESSION.get("crawl_viewed_id")
+    crawl_elapsed_minutes = SESSION.get("crawl_elapsed_minutes", 0)
     treasure = SESSION.get("treasure")
     encounter_check = SESSION.get("encounter_check")
     active_view = SESSION.get("active_view", "crawling")
@@ -1851,6 +1864,9 @@ def handle_action(
     )
     default_treasure_dc = _resolve_int(
         default_treasure_dc_form, SESSION.get("default_treasure_dc", DEFAULT_TREASURE_DC)
+    )
+    round_length_minutes = _resolve_int(
+        round_length_minutes_form, SESSION.get("round_length_minutes", DEFAULT_ROUND_LENGTH_MINUTES)
     )
 
     roll_treasure = _resolve_bool(roll_treasure_form, SESSION.get("roll_treasure", True))
@@ -1916,6 +1932,7 @@ def handle_action(
             crawl_current_id = new_room["id"]
             crawl_depth += 1
             crawl_viewed_id = None  # show the newly-entered room, not whatever was being viewed
+            crawl_elapsed_minutes += round_length_minutes
 
     elif action == "go_back":
         # Moves focus to whatever the current room opens onto: its
@@ -1946,6 +1963,7 @@ def handle_action(
             crawl_current_id = current_room["parent_id"]
             crawl_depth = parent_room["used_depth"] + 1
             crawl_viewed_id = None
+            crawl_elapsed_minutes += round_length_minutes
         elif (
             current_room is not None
             and current_room["parent_id"] is None
@@ -1957,6 +1975,17 @@ def handle_action(
             crawl_current_id = None
             crawl_depth = 0
             crawl_viewed_id = None
+            crawl_elapsed_minutes += round_length_minutes
+
+    elif action == "stay":
+        # No longer a stub - "waiting a round" without moving still
+        # advances the crawl clock (see crawl_elapsed_minutes), the
+        # same as any of the moves above. Nothing else changes:
+        # doesn't touch crawl_current_id/crawl_depth/crawl_viewed_id,
+        # unlike every action above it. Allowed from the Grand Avenue
+        # too (crawl_current_id is None) - waiting around there still
+        # takes time the same way.
+        crawl_elapsed_minutes += round_length_minutes
 
     elif action == "view_room":
         # Purely passive: changes which room's card is shown, never
@@ -1985,6 +2014,7 @@ def handle_action(
             crawl_current_id = target_id
             crawl_depth = target_room["used_depth"] + 1
             crawl_viewed_id = None
+            crawl_elapsed_minutes += round_length_minutes
 
     elif action == "toggle_connection":
         # Blocks or unblocks the room currently being viewed's own
@@ -2018,11 +2048,15 @@ def handle_action(
         # twice. The "already ransacked" guard also protects the
         # Amphoras bonus below from being (re-)applied more than once
         # if this ever somehow fires again for the same room.
+        #
+        # Also advances the crawl clock (see crawl_elapsed_minutes) -
+        # searching a room properly takes time, same as moving does.
         target_id = _to_int_or_none(room_form)
         if target_id is not None:
             target_room = _room_by_id(crawl_history, target_id)
             if target_room is not None and target_room.get("treasures") and not target_room.get("ransacked"):
                 target_room["ransacked"] = True
+                crawl_elapsed_minutes += round_length_minutes
 
                 choice = _room_ransack_choice(target_room)
                 if choice and smash_amphoras_form:
@@ -2157,6 +2191,7 @@ def handle_action(
                 crawl_current_id = target_room["id"]
                 crawl_depth = target_room["used_depth"] + 1
                 crawl_viewed_id = None
+                crawl_elapsed_minutes += round_length_minutes
 
     elif action == "use_secret_passage":
         # Only usable while standing in a room with the "Secret
@@ -2212,6 +2247,7 @@ def handle_action(
                 crawl_current_id = target_room["id"]
                 crawl_depth = target_room["used_depth"] + 1
                 crawl_viewed_id = None
+                crawl_elapsed_minutes += round_length_minutes
 
     elif action == "use_fireplace":
         # Only usable while standing in a room with the "Fireplace"
@@ -2255,6 +2291,7 @@ def handle_action(
                 crawl_current_id = target_room["id"]
                 crawl_depth = target_room["used_depth"] + 1
                 crawl_viewed_id = None
+                crawl_elapsed_minutes += round_length_minutes
 
     elif action == "check_encounter":
         # A standalone risk check (e.g. searching around, listening at
@@ -2367,16 +2404,20 @@ def handle_action(
     elif action == "reset_settings":
         # The Settings view's own "Reset to Defaults" - restores
         # every Settings-view field (both "Default ... DC" fields,
-        # "Show Roll Details", "Show Treasure Quality") back to its
-        # original, hardcoded default. Deliberately narrower than
-        # "reset" above: this doesn't touch the actual in-progress
-        # dungeon (crawl_history, the live treasure_dc/encounter_dc
-        # pools, generated rooms, ...) at all, only the settings
-        # themselves.
+        # "Show Roll Details", "Show Treasure Quality", "Crawling
+        # Round Length") back to its original, hardcoded default.
+        # Deliberately narrower than "reset" above: this doesn't
+        # touch the actual in-progress dungeon (crawl_history, the
+        # live treasure_dc/encounter_dc pools, generated rooms,
+        # crawl_elapsed_minutes, ...) at all, only the settings
+        # themselves - elapsed time already spent isn't a "setting"
+        # any more than crawl_history is, so it stays exactly like
+        # every other piece of in-progress dungeon state here.
         default_encounter_dc = DEFAULT_ENCOUNTER_DC
         default_treasure_dc = DEFAULT_TREASURE_DC
         show_roll_details = False
         show_treasure_quality = False
+        round_length_minutes = DEFAULT_ROUND_LENGTH_MINUTES
 
     elif action == "reset":
         SESSION = _default_session()
@@ -2389,6 +2430,7 @@ def handle_action(
         "crawl_history": crawl_history,
         "crawl_current_id": crawl_current_id,
         "crawl_viewed_id": crawl_viewed_id,
+        "crawl_elapsed_minutes": crawl_elapsed_minutes,
         "treasure": treasure,
         "treasure_dc": treasure_dc,
         "encounter_dc": encounter_dc,
@@ -2407,6 +2449,7 @@ def handle_action(
         "forced_quality": forced_quality,
         "show_roll_details": show_roll_details,
         "show_treasure_quality": show_treasure_quality,
+        "round_length_minutes": round_length_minutes,
     }
 
 
@@ -2523,6 +2566,23 @@ def _render_item_list(item_list, room_id=None, interactive=False):
 def _pluralize(count, singular, plural=None):
     plural = plural or f"{singular}s"
     return f"{count} {singular if count == 1 else plural}"
+
+
+def _format_elapsed_time(total_minutes) -> str:
+    """
+    "45 minutes" / "1 hour" / "2 hours 15 minutes" - used for
+    crawl_elapsed_minutes in Crawling Mode's own meta-line (see
+    _render_crawling_view). Deliberately not HH:MM - this is elapsed
+    in-fiction time since entering the dungeon, not a clock reading,
+    so a couple of rounded, spelled-out units reads more naturally
+    than a timestamp would.
+    """
+    hours, minutes = divmod(total_minutes, 60)
+    if hours and minutes:
+        return f"{_pluralize(hours, 'hour')} {_pluralize(minutes, 'minute')}"
+    if hours:
+        return _pluralize(hours, "hour")
+    return _pluralize(minutes, "minute")
 
 
 def _with_optional_lead_line(line_html, body_html):
@@ -4063,17 +4123,21 @@ def _render_crawling_view():
     else:
         go_deeper_title = "Descend to a new location"
 
+    round_length_minutes = SESSION.get("round_length_minutes", DEFAULT_ROUND_LENGTH_MINUTES)
+    elapsed_minutes = SESSION.get("crawl_elapsed_minutes", 0)
+    position_note = (
+        "You are at the Grand Avenue" if current_room is None
+        else f"You are at Depth {current_room['used_depth']}"
+    )
+
     controls = f"""
     <div class="section">
-        <div class="meta-line">{
-            "You are at the Grand Avenue" if current_room is None
-            else f"You are at Depth {current_room['used_depth']}"
-        }</div>
+        <div class="meta-line">{position_note} &middot; {_format_elapsed_time(elapsed_minutes)} elapsed</div>
         <div class="button-row">
             <button type="button" {go_back_disabled} title="{go_back_title}" onclick="runAction('go_back')">
                 Go Back
             </button>
-            <button type="button" disabled title="Not implemented yet" onclick="runAction('stay')">
+            <button type="button" title="Wait one round ({_pluralize(round_length_minutes, 'minute')}) without moving" onclick="runAction('stay')">
                 Stay
             </button>
             <button type="button" class="primary-action" {go_deeper_disabled} title="{go_deeper_title}" onclick="runAction('go_deeper')">
@@ -4196,21 +4260,23 @@ def _render_settings_view():
     parameter - what the shared treasure_dc/encounter_dc pools reset
     to on a success), "Show Roll Details" (see _show_roll_details -
     whether roll displays render at all anywhere in the UI, or
-    collapse to their plain "what it produced" form), and "Show
-    Treasure Quality" (see _show_treasure_quality - whether a
-    treasure's quality tier name is shown at all, independent of the
-    roll-details setting). Explanations live in each field's own
+    collapse to their plain "what it produced" form), "Show Treasure
+    Quality" (see _show_treasure_quality - whether a treasure's
+    quality tier name is shown at all, independent of the
+    roll-details setting), and "Crawling Round Length" (how many
+    minutes each round of Crawling Mode advances the clock by - see
+    crawl_elapsed_minutes). Explanations live in each field's own
     `title` tooltip rather than a permanent line of text underneath,
     to keep this view scannable as more settings get added here.
 
-    All four take effect immediately, same as every other input in
-    this app - no separate "Save" step. Unlike the DC fields (only
-    read the next time some other action fires - nothing watches
-    them), both checkboxes have their own onchange so toggling either
-    alone re-renders the page right away, the same way the Level
-    dropdown's onLevelChange() does - the whole point of these
-    settings is to see their effect immediately, not on the next
-    unrelated click.
+    All five take effect immediately, same as every other input in
+    this app - no separate "Save" step. Unlike the DC/round-length
+    fields (only read the next time some other action fires - nothing
+    watches them), both checkboxes have their own onchange so
+    toggling either alone re-renders the page right away, the same
+    way the Level dropdown's onLevelChange() does - the whole point
+    of those two settings specifically is to see their effect
+    immediately, not on the next unrelated click.
 
     "Reset to Defaults" (the "reset_settings" action) restores every
     field on this page - all Settings-view fields, and only those -
@@ -4221,6 +4287,7 @@ def _render_settings_view():
     """
     default_encounter_dc = SESSION.get("default_encounter_dc", DEFAULT_ENCOUNTER_DC)
     default_treasure_dc = SESSION.get("default_treasure_dc", DEFAULT_TREASURE_DC)
+    round_length_minutes = SESSION.get("round_length_minutes", DEFAULT_ROUND_LENGTH_MINUTES)
     show_roll_details_checked = "checked" if _show_roll_details() else ""
     show_treasure_quality_checked = "checked" if _show_treasure_quality() else ""
 
@@ -4239,6 +4306,13 @@ def _render_settings_view():
             </label>
             <input type="number" id="default-treasure-dc" name="default-treasure-dc"
                    value="{default_treasure_dc}">
+        </div>
+        <div class="form-row">
+            <label for="round-length-minutes" title="How many minutes one round of Crawling Mode advances the clock by - moving, waiting (Stay), or searching a room (Ransack Room) all count as a round.">
+                Crawling Round Length (minutes):
+            </label>
+            <input type="number" id="round-length-minutes" name="round-length-minutes"
+                   value="{round_length_minutes}">
         </div>
         <div class="form-row checkbox-row">
             <label title="When off, rolled numbers, modifiers, and DC comparisons are hidden throughout the app - only what they produced is still shown.">
