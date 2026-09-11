@@ -397,6 +397,45 @@
         border-color: #c99a2e;
     }
 
+    /* Leading hourglass icon inside a time-costing button (see
+       _ICON_HOURGLASS in game.py) - muted relative to the button's
+       own label text (currentColor at reduced opacity) so it reads
+       as "this also does X" rather than competing with the label,
+       and a small right margin instead of relying on the icon's own
+       whitespace. Same treatment whether the button is a plain
+       outlined one (Go Back, Go Here, Ransack Room, ...) or the
+       amber .primary-action (Go Deeper) - both just set color via
+       currentColor already, so no color override is needed here. */
+    .button-time-icon {
+        display: inline-block;
+        margin-right: 0.3rem;
+        vertical-align: -2px;
+        opacity: 0.75;
+    }
+
+    /* Sized up for the top row (Go Back/Stay/Go Deeper) - see
+       _time_cost_icon_html's large=True. Compound selector so it
+       reliably wins over the plain .button-time-icon rule above
+       regardless of source order. */
+    .button-time-icon.button-time-icon-lg {
+        vertical-align: -3px;
+    }
+
+    .button-time-icon.button-time-icon-lg svg {
+        width: 16px;
+        height: 16px;
+    }
+
+    /* A small, quiet separator between a room card's time-costing
+       buttons and its free ones when both show up together on the
+       same meta-line (Go Here/Use Lift/... vs Block Entrance) - see
+       _render_crawling_view's extra_buttons_html assembly. Not a
+       button of its own, just a visual break in the run of buttons. */
+    .button-group-divider {
+        opacity: 0.4;
+        margin: 0 0.3rem;
+    }
+
     .ransack-button {
         border-color: #8a6716;
     }

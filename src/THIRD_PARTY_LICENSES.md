@@ -2,15 +2,15 @@
 
 ## Tabler Icons
 
-This project embeds path data from five icons out of the Tabler Icons
+This project embeds path data from six icons out of the Tabler Icons
 set, inlined directly as SVG markup in `game.py` (see `_ICON_LIFT`,
 `_ICON_SECRET_PASSAGE`, `_ICON_FIREPLACE`, `_ICON_MONSTER`,
-`_ICON_TREASURE`) rather than loading the full icon font - no font
-file is shipped or loaded at runtime.
+`_ICON_TREASURE`, `_ICON_HOURGLASS`) rather than loading the full icon
+font - no font file is shipped or loaded at runtime.
 
 - Source: https://tabler.io/icons (release 3.46.0)
-- Icons used: `elevator`, `door`, `flame`, `skull`, `treasure-chest`
-  (all from the "outline" style)
+- Icons used: `elevator`, `door`, `flame`, `skull`, `treasure-chest`,
+  `hourglass-high` (all from the "outline" style)
 - License: MIT
 
 ```

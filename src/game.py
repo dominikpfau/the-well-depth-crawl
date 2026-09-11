@@ -1047,11 +1047,11 @@ def _room_treasure_pending_search(room) -> bool:
 # Copyright (c) 2020-2024 Paweł Kuna) - path data only, no font file,
 # so there's nothing to host or load at runtime. See
 # THIRD_PARTY_LICENSES.md for the full license text and which icon
-# each of these five came from (elevator/door/flame/skull/treasure-
-# chest, all from the "outline" style). Sized for a ~20px badge;
-# color comes from the badge's own inline `color` via `currentColor`,
-# so these automatically match whatever background/text pairing that
-# badge already uses.
+# each of these six came from (elevator/door/flame/skull/treasure-
+# chest/hourglass-high, all from the "outline" style). Sized for a
+# ~20px badge; color comes from the badge's own inline `color` via
+# `currentColor`, so these automatically match whatever background/
+# text pairing that badge already uses.
 _ICON_LIFT = (
     '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" '
     'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
@@ -1102,11 +1102,54 @@ _ICON_TREASURE = (
     '<path d="M12 11v2" />'
     '</svg>'
 )
+# An hourglass, not a clock - The Well has no mechanical clocks (it's a
+# medieval/fantasy setting), so a clock face would be an anachronism.
+# Used as a small leading icon inside Crawling Mode's time-costing
+# buttons (see _render_crawling_view / _render_special_connection_
+# controls / _render_room_treasures's "Ransack Room" button) - NOT as
+# a Dungeon Map badge like the five above, so it's wrapped in its own
+# `.button-time-icon` span (see style.css) rather than one of the
+# `.dtree-badge-*` classes. "hourglass-high" specifically (sand still
+# mostly at the top) rather than plain "hourglass" or "hourglass-low" -
+# reads as "time about to be spent", matching what clicking the button
+# is about to do, not "time already spent" or "time running out".
+_ICON_HOURGLASS = (
+    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" '
+    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+    'stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M6.5 7h11" />'
+    '<path d="M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1z" />'
+    '<path d="M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1z" />'
+    '</svg>'
+)
 _SPECIAL_CONNECTION_ICONS = {
     "lift": _ICON_LIFT,
     "secret_passage": _ICON_SECRET_PASSAGE,
     "fireplace": _ICON_FIREPLACE,
 }
+
+
+def _time_cost_icon_html(large=False):
+    """
+    Small leading hourglass icon for a Crawling Mode button whose
+    action advances the crawl clock (see crawl_elapsed_minutes) -
+    Go Back/Stay/Go Deeper, Go Here, Use Lift/Secret Passage/
+    Fireplace, Ransack Room. Deliberately NOT shown on a free action
+    (Block/Unblock Entrance, Pick the Lock, the small "x" remove
+    buttons) - the icon's whole job is to distinguish the two, so it
+    only ever appears on the costly side of that line.
+
+    `large=True` (see .button-time-icon-lg in style.css) sizes the
+    icon up for the top row (Go Back/Stay/Go Deeper) - those buttons
+    run noticeably bigger text (1rem, or 1.15rem bold for Go Deeper's
+    own .primary-action) than the smaller room-card buttons (Go Here,
+    Ransack Room, Use Lift, ...) the icon's base size was set against,
+    so left at the base size it read as undersized next to them.
+    """
+    cls = "button-time-icon button-time-icon-lg" if large else "button-time-icon"
+    return f'<span class="{cls}">{_ICON_HOURGLASS}</span>'
+
+
 
 # (background, text) colors cycled across distinct Lift/Secret Passage
 # pairs - reused if there are more pairs than colors, since the L1/L2/
@@ -3022,13 +3065,18 @@ def _render_room_treasures(room, show_rolls, show_quality, room_id, interactive)
                 f'<div class="treasure-context">'
                 f'<div class="treasure-context-label">{group_labels}</div>'
                 f'<button type="button" class="ransack-button" onclick="ransackRoom({room_id})">'
-                f"Ransack Room</button>"
+                f"{_time_cost_icon_html()}Ransack Room</button>"
                 f"{choice_html}"
                 f"</div>"
             )
             continue
 
         if context == "safe" and safe_pending:
+            # No time-cost icon here (see _time_cost_icon_html) -
+            # unlike "Ransack Room" just above, picking a lock doesn't
+            # advance the crawl clock at all (see handle_action's
+            # "open_safe" - deliberately not in the same list of
+            # crawl_elapsed_minutes-advancing actions as "ransack_room").
             body = (
                 f'<button type="button" class="ransack-button" onclick="openSafe({room_id})">'
                 f"Pick the Lock</button>"
@@ -4037,7 +4085,7 @@ def _render_special_connection_controls(room, history):
     if kind == "lift":
         return (
             '<button type="button" class="go-here-button" '
-            'onclick="runAction(\'use_lift\')">Use Lift</button>'
+            f'onclick="runAction(\'use_lift\')">{_time_cost_icon_html()}Use Lift</button>'
         )
 
     if kind == "secret_passage":
@@ -4056,11 +4104,11 @@ def _render_special_connection_controls(room, history):
                     f'{_render_room_option_list(candidates)}'
                     '</select>'
                     '<button type="button" class="go-here-button" '
-                    'onclick="useSecretPassage()">Use Secret Passage</button>'
+                    f'onclick="useSecretPassage()">{_time_cost_icon_html()}Use Secret Passage</button>'
                 )
         return (
             '<button type="button" class="go-here-button" '
-            'onclick="runAction(\'use_secret_passage\')">Use Secret Passage</button>'
+            f'onclick="runAction(\'use_secret_passage\')">{_time_cost_icon_html()}Use Secret Passage</button>'
         )
 
     if kind == "fireplace":
@@ -4071,11 +4119,11 @@ def _render_special_connection_controls(room, history):
                 f'{_render_room_option_list(candidates)}'
                 '</select>'
                 '<button type="button" class="go-here-button" '
-                'onclick="useFireplace()">Use Fireplace</button>'
+                f'onclick="useFireplace()">{_time_cost_icon_html()}Use Fireplace</button>'
             )
         return (
             '<button type="button" class="go-here-button" '
-            'onclick="runAction(\'use_fireplace\')">Use Fireplace</button>'
+            f'onclick="runAction(\'use_fireplace\')">{_time_cost_icon_html()}Use Fireplace</button>'
         )
 
     return ""
@@ -4135,13 +4183,13 @@ def _render_crawling_view():
         <div class="meta-line">{position_note} &middot; {_format_elapsed_time(elapsed_minutes)} elapsed</div>
         <div class="button-row">
             <button type="button" {go_back_disabled} title="{go_back_title}" onclick="runAction('go_back')">
-                Go Back
+                {_time_cost_icon_html(large=True)}Go Back
             </button>
             <button type="button" title="Wait one round ({_pluralize(round_length_minutes, 'minute')}) without moving" onclick="runAction('stay')">
-                Stay
+                {_time_cost_icon_html(large=True)}Stay
             </button>
             <button type="button" class="primary-action" {go_deeper_disabled} title="{go_deeper_title}" onclick="runAction('go_deeper')">
-                Go Deeper
+                {_time_cost_icon_html(large=True)}Go Deeper
             </button>
         </div>
     </div>
@@ -4203,7 +4251,7 @@ def _render_crawling_view():
         if not is_current_position and _is_adjacent_room(viewed_room["id"], current_id, history):
             go_here_html = (
                 f'<button type="button" class="go-here-button" '
-                f'onclick="enterRoom({viewed_room["id"]})">Go Here</button>'
+                f'onclick="enterRoom({viewed_room["id"]})">{_time_cost_icon_html()}Go Here</button>'
             )
 
         toggle_connection_html = ""
@@ -4213,7 +4261,9 @@ def _render_crawling_view():
             # back), not just while merely viewing some other room.
             # A root (parent_id None) has no toggle at all - its only
             # connection is either to nothing, or to the Grand
-            # Avenue, and that one isn't blockable (yet).
+            # Avenue, and that one isn't blockable (yet). Free - no
+            # time-cost icon - this is bookkeeping, not an action the
+            # party actually takes in the fiction.
             toggle_label = "Unblock Entrance" if viewed_room.get("connection_blocked") else "Block Entrance"
             toggle_connection_html = (
                 f'<button type="button" class="go-here-button" '
@@ -4231,12 +4281,24 @@ def _render_crawling_view():
         if is_current_position:
             special_connection_html = _render_special_connection_controls(viewed_room, history)
 
+        # Time-costing buttons (Go Here, Use Lift/Secret Passage/
+        # Fireplace) grouped together first, with the free one (Block/
+        # Unblock Entrance) set off after a small divider - see
+        # .button-time-icon/.button-group-divider in style.css. Only
+        # adds the divider when there's actually something to divide.
+        cost_buttons_html = go_here_html + special_connection_html
+        extra_buttons_html = cost_buttons_html
+        if toggle_connection_html:
+            if cost_buttons_html:
+                extra_buttons_html += '<span class="button-group-divider">&middot;</span>'
+            extra_buttons_html += toggle_connection_html
+
         room_card_html = f"""
         <div class="section">
             <div class="crawl-history">
                 {_render_crawl_entry_full(
                     viewed_room, is_current_position, is_fresh,
-                    go_here_html + toggle_connection_html + special_connection_html,
+                    extra_buttons_html,
                 )}
             </div>
         </div>
