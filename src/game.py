@@ -4180,7 +4180,8 @@ def _render_crawling_view():
 
     controls = f"""
     <div class="section">
-        <div class="meta-line">{position_note} &middot; {_format_elapsed_time(elapsed_minutes)} elapsed</div>
+        <div class="meta-line position-line">{position_note}</div>
+        <div class="meta-line elapsed-time-line">{_time_cost_icon_html()}{_format_elapsed_time(elapsed_minutes)} elapsed</div>
         <div class="button-row">
             <button type="button" {go_back_disabled} title="{go_back_title}" onclick="runAction('go_back')">
                 {_time_cost_icon_html(large=True)}Go Back

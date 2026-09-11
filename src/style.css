@@ -161,6 +161,25 @@
         margin-bottom: 0.75rem;
     }
 
+    /* Crawling Mode's "You are at Depth N" / "You are at the Grand
+       Avenue" line and its own "N minutes elapsed" line just below -
+       split into two separate .meta-line rows (rather than one line
+       joined by a middle dot) specifically so "Depth 1" and "30
+       minutes" never sit directly next to each other - close enough
+       together to misread as a single "1:30"-style time. Tightened
+       gap between the two (position-line's own smaller margin) so
+       they still read as one related two-line group, and the elapsed
+       line is a touch smaller/quieter - it's supporting information,
+       not the headline the position itself is. */
+    .position-line {
+        margin-bottom: 0.15rem;
+    }
+
+    .elapsed-time-line {
+        font-size: 0.8rem;
+        opacity: 0.7;
+    }
+
     .meta-badge {
         display: inline-block;
         padding: 0.1rem 0.4rem;

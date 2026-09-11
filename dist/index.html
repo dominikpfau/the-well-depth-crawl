@@ -169,6 +169,25 @@
         margin-bottom: 0.75rem;
     }
 
+    /* Crawling Mode's "You are at Depth N" / "You are at the Grand
+       Avenue" line and its own "N minutes elapsed" line just below -
+       split into two separate .meta-line rows (rather than one line
+       joined by a middle dot) specifically so "Depth 1" and "30
+       minutes" never sit directly next to each other - close enough
+       together to misread as a single "1:30"-style time. Tightened
+       gap between the two (position-line's own smaller margin) so
+       they still read as one related two-line group, and the elapsed
+       line is a touch smaller/quieter - it's supporting information,
+       not the headline the position itself is. */
+    .position-line {
+        margin-bottom: 0.15rem;
+    }
+
+    .elapsed-time-line {
+        font-size: 0.8rem;
+        opacity: 0.7;
+    }
+
     .meta-badge {
         display: inline-block;
         padding: 0.1rem 0.4rem;
@@ -6545,7 +6564,8 @@ def _render_crawling_view():
 
     controls = f"""
     <div class="section">
-        <div class="meta-line">{position_note} &middot; {_format_elapsed_time(elapsed_minutes)} elapsed</div>
+        <div class="meta-line position-line">{position_note}</div>
+        <div class="meta-line elapsed-time-line">{_time_cost_icon_html()}{_format_elapsed_time(elapsed_minutes)} elapsed</div>
         <div class="button-row">
             <button type="button" {go_back_disabled} title="{go_back_title}" onclick="runAction('go_back')">
                 {_time_cost_icon_html(large=True)}Go Back
