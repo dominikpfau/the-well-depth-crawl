@@ -455,6 +455,100 @@
         margin: 0 0.3rem;
     }
 
+    /* The optional torch/lantern timer (see LIGHT_SOURCES /
+       _render_light_gauges) - one row per tracked source, icon +
+       depleting bar + refuel button. Colors deliberately distinct
+       from every other status color already in the app (amber
+       current/path, viewed blue, warning red, the Dungeon Map's
+       special-connection/monster/treasure palette) - see the "normal"
+       tone below, a warm gold-tan that reads as "a light is lit"
+       without colliding with the amber .primary-action accent. */
+    .light-gauges {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .light-gauge-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .light-gauge-icon {
+        display: inline-flex;
+        flex-shrink: 0;
+    }
+
+    .light-gauge-bar {
+        flex: 1 1 auto;
+        height: 6px;
+        min-width: 40px;
+        background: #3a3833;
+        border-radius: 3px;
+        overflow: hidden;
+    }
+
+    .light-gauge-fill {
+        height: 100%;
+        border-radius: 3px;
+        transition: width 0.2s ease;
+    }
+
+    .light-gauge-refuel {
+        font-size: 0.75rem;
+        padding: 0.15rem 0.55rem;
+        flex-shrink: 0;
+    }
+
+    /* Normal (>20% remaining) - warm gold-tan, distinct from the
+       amber .primary-action accent and everything in the Dungeon Map
+       palette (see this block's own opening comment). */
+    .light-gauge-normal .light-gauge-icon {
+        color: #d4a24e;
+    }
+
+    .light-gauge-normal .light-gauge-fill {
+        background: #d4a24e;
+    }
+
+    /* Low (1-20%) - shifts toward the app's existing warning-orange
+       territory (Fireplace's own badge color), a calmer heads-up. */
+    .light-gauge-low .light-gauge-icon {
+        color: #d97a3a;
+    }
+
+    .light-gauge-low .light-gauge-fill {
+        background: #d97a3a;
+    }
+
+    /* Out (0%, including "never lit yet" - the two look the same,
+       there's nothing to distinguish them by) - dim, muted icon, and
+       a slow, gentle pulse on the (now essentially empty) bar's own
+       track, so it's noticeable without being jarring - purely a
+       soft visual nudge, never blocks anything (see
+       _render_light_gauges' own docstring on scope). Pulses the
+       track, not the fill - the fill is legitimately ~0% wide here,
+       and animating it to full would misleadingly suggest there's
+       still fuel left. */
+    .light-gauge-out .light-gauge-icon {
+        color: #6b6560;
+    }
+
+    .light-gauge-out .light-gauge-fill {
+        background: #8a3a3a;
+    }
+
+    .light-gauge-out .light-gauge-bar {
+        animation: light-gauge-pulse 2.4s ease-in-out infinite;
+    }
+
+    @keyframes light-gauge-pulse {
+        0%, 100% { background: #3a3833; }
+        50% { background: #5a2f2f; }
+    }
+
     .ransack-button {
         border-color: #8a6716;
     }

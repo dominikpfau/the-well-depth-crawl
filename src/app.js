@@ -64,7 +64,7 @@ function renderApp() {
     document.getElementById("app").innerHTML = html;
 }
 
-async function dispatch(action, view, roomId, entryId) {
+async function dispatch(action, view, roomId, entryId, lightSource = null) {
     try {
         pyGame.handle_action(
             action,
@@ -87,7 +87,12 @@ async function dispatch(action, view, roomId, entryId) {
             getIntFieldArg("default-treasure-dc"),
             getCheckbox("show-roll-details"),
             getCheckbox("show-treasure-quality"),
-            getIntFieldArg("round-length-minutes")
+            getIntFieldArg("round-length-minutes"),
+            getCheckbox("track-torch"),
+            getCheckbox("track-lantern"),
+            getIntFieldArg("torch-burn-minutes"),
+            getIntFieldArg("lantern-burn-minutes"),
+            lightSource == null ? null : String(lightSource)
         );
         renderApp();
     } catch (err) {
@@ -134,6 +139,15 @@ async function ransackRoom(roomId) {
 
 async function openSafe(roomId) {
     return dispatch("open_safe", null, roomId);
+}
+
+async function refuelLight(source) {
+    // "Light Torch" / "Refuel Lantern" - unlike removeMonsterGroup/
+    // removeTreasureItem (which reuse the roomId/entryId slots for
+    // their own unrelated ids), this has its own dedicated
+    // lightSource param instead, since a light source isn't a room
+    // or an entry at all - roomId/entryId stay null here.
+    return dispatch("refuel_light", null, null, null, source);
 }
 
 async function removeMonsterGroup(roomId, groupId) {

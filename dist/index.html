@@ -463,6 +463,100 @@
         margin: 0 0.3rem;
     }
 
+    /* The optional torch/lantern timer (see LIGHT_SOURCES /
+       _render_light_gauges) - one row per tracked source, icon +
+       depleting bar + refuel button. Colors deliberately distinct
+       from every other status color already in the app (amber
+       current/path, viewed blue, warning red, the Dungeon Map's
+       special-connection/monster/treasure palette) - see the "normal"
+       tone below, a warm gold-tan that reads as "a light is lit"
+       without colliding with the amber .primary-action accent. */
+    .light-gauges {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .light-gauge-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .light-gauge-icon {
+        display: inline-flex;
+        flex-shrink: 0;
+    }
+
+    .light-gauge-bar {
+        flex: 1 1 auto;
+        height: 6px;
+        min-width: 40px;
+        background: #3a3833;
+        border-radius: 3px;
+        overflow: hidden;
+    }
+
+    .light-gauge-fill {
+        height: 100%;
+        border-radius: 3px;
+        transition: width 0.2s ease;
+    }
+
+    .light-gauge-refuel {
+        font-size: 0.75rem;
+        padding: 0.15rem 0.55rem;
+        flex-shrink: 0;
+    }
+
+    /* Normal (>20% remaining) - warm gold-tan, distinct from the
+       amber .primary-action accent and everything in the Dungeon Map
+       palette (see this block's own opening comment). */
+    .light-gauge-normal .light-gauge-icon {
+        color: #d4a24e;
+    }
+
+    .light-gauge-normal .light-gauge-fill {
+        background: #d4a24e;
+    }
+
+    /* Low (1-20%) - shifts toward the app's existing warning-orange
+       territory (Fireplace's own badge color), a calmer heads-up. */
+    .light-gauge-low .light-gauge-icon {
+        color: #d97a3a;
+    }
+
+    .light-gauge-low .light-gauge-fill {
+        background: #d97a3a;
+    }
+
+    /* Out (0%, including "never lit yet" - the two look the same,
+       there's nothing to distinguish them by) - dim, muted icon, and
+       a slow, gentle pulse on the (now essentially empty) bar's own
+       track, so it's noticeable without being jarring - purely a
+       soft visual nudge, never blocks anything (see
+       _render_light_gauges' own docstring on scope). Pulses the
+       track, not the fill - the fill is legitimately ~0% wide here,
+       and animating it to full would misleadingly suggest there's
+       still fuel left. */
+    .light-gauge-out .light-gauge-icon {
+        color: #6b6560;
+    }
+
+    .light-gauge-out .light-gauge-fill {
+        background: #8a3a3a;
+    }
+
+    .light-gauge-out .light-gauge-bar {
+        animation: light-gauge-pulse 2.4s ease-in-out infinite;
+    }
+
+    @keyframes light-gauge-pulse {
+        0%, 100% { background: #3a3833; }
+        50% { background: #5a2f2f; }
+    }
+
     .ransack-button {
         border-color: #8a6716;
     }
@@ -2427,6 +2521,171 @@ DEFAULT_ENCOUNTER_DC = 8
 DEFAULT_ROUND_LENGTH_MINUTES = 15
 
 
+# Inline SVGs traced directly from Tabler Icons (MIT License,
+# Copyright (c) 2020-2024 Paweł Kuna) - path data only, no font file,
+# so there's nothing to host or load at runtime. See
+# THIRD_PARTY_LICENSES.md for the full license text and which icon
+# each of these six came from (elevator/door/flame/skull/treasure-
+# chest/hourglass-high, all from the "outline" style). Sized for a
+# ~20px badge; color comes from the badge's own inline `color` via
+# `currentColor`, so these automatically match whatever background/
+# text pairing that badge already uses.
+_ICON_LIFT = (
+    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" '
+    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+    'stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M5 5a1 1 0 0 1 1 -1h12a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1h-12a1 1 0 0 1 -1 -1l0 -14" />'
+    '<path d="M10 10l2 -2l2 2" />'
+    '<path d="M10 14l2 2l2 -2" />'
+    '</svg>'
+)
+_ICON_SECRET_PASSAGE = (
+    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" '
+    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+    'stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M14 12v.01" />'
+    '<path d="M3 21h18" />'
+    '<path d="M6 21v-16a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v16" />'
+    '</svg>'
+)
+_ICON_FIREPLACE = (
+    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" '
+    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+    'stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M12 10.941c2.333 -3.308 .167 -7.823 -1 -8.941c0 3.395 -2.235 5.299 -3.667 6.706'
+    'c-1.43 1.408 -2.333 3.294 -2.333 5.588c0 3.704 3.134 6.706 7 6.706c3.866 0 7 -3.002 7 -6.706'
+    'c0 -1.712 -1.232 -4.403 -2.333 -5.588c-2.084 3.353 -3.257 3.353 -4.667 2.235" />'
+    '</svg>'
+)
+_ICON_MONSTER = (
+    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" '
+    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+    'stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M12 4c4.418 0 8 3.358 8 7.5c0 1.901 -.755 3.637 -2 4.96l0 2.54a1 1 0 0 1 -1 1'
+    'h-10a1 1 0 0 1 -1 -1v-2.54c-1.245 -1.322 -2 -3.058 -2 -4.96c0 -4.142 3.582 -7.5 8 -7.5" />'
+    '<path d="M10 17v3" />'
+    '<path d="M14 17v3" />'
+    '<path d="M8 11a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />'
+    '<path d="M14 11a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />'
+    '</svg>'
+)
+_ICON_TREASURE = (
+    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" '
+    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+    'stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M4 19h16a1 1 0 0 0 1 -1v-9a4 4 0 0 0 -4 -4h-10a4 4 0 0 0 -4 4v9a1 1 0 0 0 1 1" />'
+    '<path d="M3 11h18" />'
+    '<path d="M16 5v14" />'
+    '<path d="M8 5v14" />'
+    '<path d="M12 11v2" />'
+    '</svg>'
+)
+# An hourglass, not a clock - The Well has no mechanical clocks (it's a
+# medieval/fantasy setting), so a clock face would be an anachronism.
+# Used as a small leading icon inside Crawling Mode's time-costing
+# buttons (see _render_crawling_view / _render_special_connection_
+# controls / _render_room_treasures's "Ransack Room" button) - NOT as
+# a Dungeon Map badge like the five above, so it's wrapped in its own
+# `.button-time-icon` span (see style.css) rather than one of the
+# `.dtree-badge-*` classes. "hourglass-high" specifically (sand still
+# mostly at the top) rather than plain "hourglass" or "hourglass-low" -
+# reads as "time about to be spent", matching what clicking the button
+# is about to do, not "time already spent" or "time running out".
+_ICON_HOURGLASS = (
+    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" '
+    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+    'stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M6.5 7h11" />'
+    '<path d="M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1z" />'
+    '<path d="M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1z" />'
+    '</svg>'
+)
+# Torch and Lantern - hand-drawn for this project, NOT traced from
+# Tabler like the six icons above (so NOT covered by THIRD_PARTY_
+# LICENSES.md) - Tabler's icon set has nothing for either; its
+# closest match, "lamp", is a modern desk lamp, exactly the kind of
+# anachronism _ICON_HOURGLASS's own comment already explains avoiding
+# a clock for. Same visual grammar as the traced ones regardless
+# (24x24 viewBox, 2px round stroke, currentColor) so they sit
+# comfortably alongside them wherever they're used.
+_ICON_TORCH = (
+    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" '
+    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+    'stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M12 2.5c1.2 1.8 -.8 3 -.8 4.8a1.3 1.3 0 0 0 2.6 0c0 -.6 -.2 -1.1 -.5 -1.5" />'
+    '<path d="M9.5 8.5h5l-1 4h-3z" />'
+    '<path d="M11 12.5h2l-.6 9h-.8z" />'
+    '</svg>'
+)
+_ICON_LANTERN = (
+    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" '
+    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
+    'stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M10.5 2h3v2.2h-3z" />'
+    '<path d="M8.5 4.2h7l1 3.8h-9z" />'
+    '<path d="M7.5 8h9v9.5a1 1 0 0 1 -1 1h-7a1 1 0 0 1 -1 -1z" />'
+    '<path d="M12 10.8v5" />'
+    '<path d="M10.2 20.2h3.6" />'
+    '<path d="M11 18.5h2v1.7h-2z" />'
+    '</svg>'
+)
+_SPECIAL_CONNECTION_ICONS = {
+    "lift": _ICON_LIFT,
+    "secret_passage": _ICON_SECRET_PASSAGE,
+    "fireplace": _ICON_FIREPLACE,
+}
+
+# Extensibility point for the (optional) light-source timer, the same
+# "add new keys rather than special-casing individual names" pattern
+# as DETAIL_TRAITS/LOCATION_TRAITS - adding a third light source later
+# is meant to mean extending this dict, not restructuring anything
+# that reads it (_render_light_gauges, _advance_crawl_clock, the
+# "refuel_light" action). The one thing this dict *can't* cover on
+# its own: each source still needs its own explicit `..._burn_minutes
+# _form` parameter on handle_action and its own settings-view input,
+# since every dispatch()/handle_action argument is an explicit,
+# named, positional slot in this codebase (see handle_action's own
+# docstring) - there's no generic "any settings field" plumbing to
+# hook into instead.
+LIGHT_SOURCES = {
+    "torch": {
+        "label": "Torch",
+        "icon": _ICON_TORCH,
+        "default_burn_minutes": 120,
+        "refuel_label": "Light Torch",
+    },
+    "lantern": {
+        "label": "Lantern",
+        "icon": _ICON_LANTERN,
+        "default_burn_minutes": 360,
+        "refuel_label": "Refuel Lantern",
+    },
+}
+
+
+def _time_cost_icon_html(large=False):
+    """
+    Small leading hourglass icon for a Crawling Mode button whose
+    action advances the crawl clock (see crawl_elapsed_minutes) -
+    Go Back/Stay/Go Deeper, Go Here, Use Lift/Secret Passage/
+    Fireplace, Ransack Room. Deliberately NOT shown on a free action
+    (Block/Unblock Entrance, Pick the Lock, the small "x" remove
+    buttons) - the icon's whole job is to distinguish the two, so it
+    only ever appears on the costly side of that line.
+
+    `large=True` (see .button-time-icon-lg in style.css) sizes the
+    icon up for the top row (Go Back/Stay/Go Deeper) - those buttons
+    run noticeably bigger text (1rem, or 1.15rem bold for Go Deeper's
+    own .primary-action) than the smaller room-card buttons (Go Here,
+    Ransack Room, Use Lift, ...) the icon's base size was set against,
+    so left at the base size it read as undersized next to them.
+    """
+    cls = "button-time-icon button-time-icon-lg" if large else "button-time-icon"
+    return f'<span class="{cls}">{_ICON_HOURGLASS}</span>'
+
+
+
+
 # ----------------------------
 # LOGIC (unchanged from the Flask version)
 # ----------------------------
@@ -3188,6 +3447,9 @@ def _default_session() -> dict:
         "crawl_viewed_id": None,
         "crawl_elapsed_minutes": 0,
         "round_length_minutes": DEFAULT_ROUND_LENGTH_MINUTES,
+        "track_light": {key: False for key in LIGHT_SOURCES},
+        "light_burn_minutes": {key: cfg["default_burn_minutes"] for key, cfg in LIGHT_SOURCES.items()},
+        "light_remaining_minutes": {key: 0 for key in LIGHT_SOURCES},
         "treasure": None,
         "treasure_dc": DEFAULT_TREASURE_DC,
         "encounter_dc": DEFAULT_ENCOUNTER_DC,
@@ -3423,116 +3685,6 @@ def _room_treasure_pending_search(room) -> bool:
         not _treasure_entry_is_visible(room, entry)
         for entry in room.get("treasures", [])
     )
-
-
-
-
-# Inline SVGs traced directly from Tabler Icons (MIT License,
-# Copyright (c) 2020-2024 Paweł Kuna) - path data only, no font file,
-# so there's nothing to host or load at runtime. See
-# THIRD_PARTY_LICENSES.md for the full license text and which icon
-# each of these six came from (elevator/door/flame/skull/treasure-
-# chest/hourglass-high, all from the "outline" style). Sized for a
-# ~20px badge; color comes from the badge's own inline `color` via
-# `currentColor`, so these automatically match whatever background/
-# text pairing that badge already uses.
-_ICON_LIFT = (
-    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" '
-    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
-    'stroke-linejoin="round" aria-hidden="true">'
-    '<path d="M5 5a1 1 0 0 1 1 -1h12a1 1 0 0 1 1 1v14a1 1 0 0 1 -1 1h-12a1 1 0 0 1 -1 -1l0 -14" />'
-    '<path d="M10 10l2 -2l2 2" />'
-    '<path d="M10 14l2 2l2 -2" />'
-    '</svg>'
-)
-_ICON_SECRET_PASSAGE = (
-    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" '
-    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
-    'stroke-linejoin="round" aria-hidden="true">'
-    '<path d="M14 12v.01" />'
-    '<path d="M3 21h18" />'
-    '<path d="M6 21v-16a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v16" />'
-    '</svg>'
-)
-_ICON_FIREPLACE = (
-    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" '
-    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
-    'stroke-linejoin="round" aria-hidden="true">'
-    '<path d="M12 10.941c2.333 -3.308 .167 -7.823 -1 -8.941c0 3.395 -2.235 5.299 -3.667 6.706'
-    'c-1.43 1.408 -2.333 3.294 -2.333 5.588c0 3.704 3.134 6.706 7 6.706c3.866 0 7 -3.002 7 -6.706'
-    'c0 -1.712 -1.232 -4.403 -2.333 -5.588c-2.084 3.353 -3.257 3.353 -4.667 2.235" />'
-    '</svg>'
-)
-_ICON_MONSTER = (
-    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" '
-    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
-    'stroke-linejoin="round" aria-hidden="true">'
-    '<path d="M12 4c4.418 0 8 3.358 8 7.5c0 1.901 -.755 3.637 -2 4.96l0 2.54a1 1 0 0 1 -1 1'
-    'h-10a1 1 0 0 1 -1 -1v-2.54c-1.245 -1.322 -2 -3.058 -2 -4.96c0 -4.142 3.582 -7.5 8 -7.5" />'
-    '<path d="M10 17v3" />'
-    '<path d="M14 17v3" />'
-    '<path d="M8 11a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />'
-    '<path d="M14 11a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />'
-    '</svg>'
-)
-_ICON_TREASURE = (
-    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" '
-    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
-    'stroke-linejoin="round" aria-hidden="true">'
-    '<path d="M4 19h16a1 1 0 0 0 1 -1v-9a4 4 0 0 0 -4 -4h-10a4 4 0 0 0 -4 4v9a1 1 0 0 0 1 1" />'
-    '<path d="M3 11h18" />'
-    '<path d="M16 5v14" />'
-    '<path d="M8 5v14" />'
-    '<path d="M12 11v2" />'
-    '</svg>'
-)
-# An hourglass, not a clock - The Well has no mechanical clocks (it's a
-# medieval/fantasy setting), so a clock face would be an anachronism.
-# Used as a small leading icon inside Crawling Mode's time-costing
-# buttons (see _render_crawling_view / _render_special_connection_
-# controls / _render_room_treasures's "Ransack Room" button) - NOT as
-# a Dungeon Map badge like the five above, so it's wrapped in its own
-# `.button-time-icon` span (see style.css) rather than one of the
-# `.dtree-badge-*` classes. "hourglass-high" specifically (sand still
-# mostly at the top) rather than plain "hourglass" or "hourglass-low" -
-# reads as "time about to be spent", matching what clicking the button
-# is about to do, not "time already spent" or "time running out".
-_ICON_HOURGLASS = (
-    '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" '
-    'stroke="currentColor" stroke-width="2" stroke-linecap="round" '
-    'stroke-linejoin="round" aria-hidden="true">'
-    '<path d="M6.5 7h11" />'
-    '<path d="M6 20v-2a6 6 0 1 1 12 0v2a1 1 0 0 1 -1 1h-10a1 1 0 0 1 -1 -1z" />'
-    '<path d="M6 4v2a6 6 0 1 0 12 0v-2a1 1 0 0 0 -1 -1h-10a1 1 0 0 0 -1 1z" />'
-    '</svg>'
-)
-_SPECIAL_CONNECTION_ICONS = {
-    "lift": _ICON_LIFT,
-    "secret_passage": _ICON_SECRET_PASSAGE,
-    "fireplace": _ICON_FIREPLACE,
-}
-
-
-def _time_cost_icon_html(large=False):
-    """
-    Small leading hourglass icon for a Crawling Mode button whose
-    action advances the crawl clock (see crawl_elapsed_minutes) -
-    Go Back/Stay/Go Deeper, Go Here, Use Lift/Secret Passage/
-    Fireplace, Ransack Room. Deliberately NOT shown on a free action
-    (Block/Unblock Entrance, Pick the Lock, the small "x" remove
-    buttons) - the icon's whole job is to distinguish the two, so it
-    only ever appears on the costly side of that line.
-
-    `large=True` (see .button-time-icon-lg in style.css) sizes the
-    icon up for the top row (Go Back/Stay/Go Deeper) - those buttons
-    run noticeably bigger text (1rem, or 1.15rem bold for Go Deeper's
-    own .primary-action) than the smaller room-card buttons (Go Here,
-    Ransack Room, Use Lift, ...) the icon's base size was set against,
-    so left at the base size it read as undersized next to them.
-    """
-    cls = "button-time-icon button-time-icon-lg" if large else "button-time-icon"
-    return f'<span class="{cls}">{_ICON_HOURGLASS}</span>'
-
 
 
 # (background, text) colors cycled across distinct Lift/Secret Passage
@@ -4155,6 +4307,11 @@ def handle_action(
     show_roll_details_form=None,
     show_treasure_quality_form=None,
     round_length_minutes_form=None,
+    track_torch_form=None,
+    track_lantern_form=None,
+    torch_burn_minutes_form=None,
+    lantern_burn_minutes_form=None,
+    light_source_form=None,
 ):
     """
     Mirrors the POST branch of the original Flask route.
@@ -4266,6 +4423,27 @@ def handle_action(
     itself - see crawl_elapsed_minutes below for what does - just
     sets how big each advance is going forward. Changing it doesn't
     retroactively rescale time already elapsed.
+
+    `track_torch_form`/`track_lantern_form` are the Settings view's
+    own "Track Torch"/"Track Lantern" checkboxes - independent,
+    off-by-default toggles for each half of the optional torch/
+    lantern timer (see LIGHT_SOURCES, _advance_crawl_clock,
+    _render_light_gauges) - deliberately two separate switches, not
+    one master one, so a table that only cares about one of the two
+    isn't stuck seeing (or clock-ticking) a gauge for the other.
+    `torch_burn_minutes_form`/`lantern_burn_minutes_form` are that
+    same view's per-source "how long does a full one last" fields
+    (default each source's own `default_burn_minutes` in
+    LIGHT_SOURCES) - same relationship to light_remaining_minutes
+    that round_length_minutes_form has to crawl_elapsed_minutes:
+    configures the rate, doesn't move the number itself.
+
+    `light_source_form` is only used by "refuel_light" - which gauge
+    (a key into LIGHT_SOURCES, e.g. "torch") to reset back to its own
+    full burn time, same idea as lighting a fresh torch or topping up
+    a lantern's oil. An unrecognized key is a no-op, the same
+    "nothing else validates this before it gets here" treatment
+    "toggle_connection"'s `room_form` gets.
     """
     global SESSION
 
@@ -4294,6 +4472,30 @@ def handle_action(
     )
     round_length_minutes = _resolve_int(
         round_length_minutes_form, SESSION.get("round_length_minutes", DEFAULT_ROUND_LENGTH_MINUTES)
+    )
+
+    # Light-source timer settings (see LIGHT_SOURCES) - both dicts
+    # are copied (not mutated in place) since a resolved value has to
+    # replace just its own source's entry, never the whole dict.
+    # track_light is per-source (not one master on/off) - see this
+    # function's own docstring on track_torch_form/track_lantern_form.
+    track_light = dict(SESSION.get("track_light") or {key: False for key in LIGHT_SOURCES})
+    track_light["torch"] = _resolve_bool(track_torch_form, track_light.get("torch", False))
+    track_light["lantern"] = _resolve_bool(track_lantern_form, track_light.get("lantern", False))
+    light_burn_minutes = dict(
+        SESSION.get("light_burn_minutes")
+        or {key: cfg["default_burn_minutes"] for key, cfg in LIGHT_SOURCES.items()}
+    )
+    light_burn_minutes["torch"] = _resolve_int(
+        torch_burn_minutes_form,
+        light_burn_minutes.get("torch", LIGHT_SOURCES["torch"]["default_burn_minutes"]),
+    )
+    light_burn_minutes["lantern"] = _resolve_int(
+        lantern_burn_minutes_form,
+        light_burn_minutes.get("lantern", LIGHT_SOURCES["lantern"]["default_burn_minutes"]),
+    )
+    light_remaining_minutes = dict(
+        SESSION.get("light_remaining_minutes") or {key: 0 for key in LIGHT_SOURCES}
     )
 
     roll_treasure = _resolve_bool(roll_treasure_form, SESSION.get("roll_treasure", True))
@@ -4359,7 +4561,9 @@ def handle_action(
             crawl_current_id = new_room["id"]
             crawl_depth += 1
             crawl_viewed_id = None  # show the newly-entered room, not whatever was being viewed
-            crawl_elapsed_minutes += round_length_minutes
+            crawl_elapsed_minutes, light_remaining_minutes = _advance_crawl_clock(
+                crawl_elapsed_minutes, light_remaining_minutes, round_length_minutes, track_light
+            )
 
     elif action == "go_back":
         # Moves focus to whatever the current room opens onto: its
@@ -4390,7 +4594,9 @@ def handle_action(
             crawl_current_id = current_room["parent_id"]
             crawl_depth = parent_room["used_depth"] + 1
             crawl_viewed_id = None
-            crawl_elapsed_minutes += round_length_minutes
+            crawl_elapsed_minutes, light_remaining_minutes = _advance_crawl_clock(
+                crawl_elapsed_minutes, light_remaining_minutes, round_length_minutes, track_light
+            )
         elif (
             current_room is not None
             and current_room["parent_id"] is None
@@ -4402,7 +4608,9 @@ def handle_action(
             crawl_current_id = None
             crawl_depth = 0
             crawl_viewed_id = None
-            crawl_elapsed_minutes += round_length_minutes
+            crawl_elapsed_minutes, light_remaining_minutes = _advance_crawl_clock(
+                crawl_elapsed_minutes, light_remaining_minutes, round_length_minutes, track_light
+            )
 
     elif action == "stay":
         # No longer a stub - "waiting a round" without moving still
@@ -4412,7 +4620,9 @@ def handle_action(
         # unlike every action above it. Allowed from the Grand Avenue
         # too (crawl_current_id is None) - waiting around there still
         # takes time the same way.
-        crawl_elapsed_minutes += round_length_minutes
+        crawl_elapsed_minutes, light_remaining_minutes = _advance_crawl_clock(
+            crawl_elapsed_minutes, light_remaining_minutes, round_length_minutes, track_light
+        )
 
     elif action == "view_room":
         # Purely passive: changes which room's card is shown, never
@@ -4441,7 +4651,9 @@ def handle_action(
             crawl_current_id = target_id
             crawl_depth = target_room["used_depth"] + 1
             crawl_viewed_id = None
-            crawl_elapsed_minutes += round_length_minutes
+            crawl_elapsed_minutes, light_remaining_minutes = _advance_crawl_clock(
+                crawl_elapsed_minutes, light_remaining_minutes, round_length_minutes, track_light
+            )
 
     elif action == "toggle_connection":
         # Blocks or unblocks the room currently being viewed's own
@@ -4483,7 +4695,9 @@ def handle_action(
             target_room = _room_by_id(crawl_history, target_id)
             if target_room is not None and target_room.get("treasures") and not target_room.get("ransacked"):
                 target_room["ransacked"] = True
-                crawl_elapsed_minutes += round_length_minutes
+                crawl_elapsed_minutes, light_remaining_minutes = _advance_crawl_clock(
+                    crawl_elapsed_minutes, light_remaining_minutes, round_length_minutes, track_light
+                )
 
                 choice = _room_ransack_choice(target_room)
                 if choice and smash_amphoras_form:
@@ -4544,6 +4758,22 @@ def handle_action(
             )
             if has_safe and not target_room.get("safe_opened"):
                 target_room["safe_opened"] = True
+
+    elif action == "refuel_light":
+        # "Light Torch" / "Refuel Lantern" (see _render_light_gauges) -
+        # resets one light source's remaining burn time back to its
+        # own configured full duration (light_burn_minutes), same
+        # idea as lighting a fresh torch or topping up a lantern's
+        # oil. Free - no crawl-clock cost (see _advance_crawl_clock) -
+        # the same treatment "open_safe" gets, not "ransack_room"'s.
+        # `light_source_form` picks which gauge; an unrecognized key
+        # (or the feature being off entirely) is a no-op rather than
+        # raising, same "nothing else validates this before it gets
+        # here" reasoning "toggle_connection"'s room_form gets.
+        if light_source_form in LIGHT_SOURCES:
+            light_remaining_minutes[light_source_form] = light_burn_minutes.get(
+                light_source_form, LIGHT_SOURCES[light_source_form]["default_burn_minutes"]
+            )
 
     elif action == "remove_monster_group":
         # Marks one monster group ("3x Goblin") as dealt with -
@@ -4618,7 +4848,9 @@ def handle_action(
                 crawl_current_id = target_room["id"]
                 crawl_depth = target_room["used_depth"] + 1
                 crawl_viewed_id = None
-                crawl_elapsed_minutes += round_length_minutes
+                crawl_elapsed_minutes, light_remaining_minutes = _advance_crawl_clock(
+                    crawl_elapsed_minutes, light_remaining_minutes, round_length_minutes, track_light
+                )
 
     elif action == "use_secret_passage":
         # Only usable while standing in a room with the "Secret
@@ -4674,7 +4906,9 @@ def handle_action(
                 crawl_current_id = target_room["id"]
                 crawl_depth = target_room["used_depth"] + 1
                 crawl_viewed_id = None
-                crawl_elapsed_minutes += round_length_minutes
+                crawl_elapsed_minutes, light_remaining_minutes = _advance_crawl_clock(
+                    crawl_elapsed_minutes, light_remaining_minutes, round_length_minutes, track_light
+                )
 
     elif action == "use_fireplace":
         # Only usable while standing in a room with the "Fireplace"
@@ -4718,7 +4952,9 @@ def handle_action(
                 crawl_current_id = target_room["id"]
                 crawl_depth = target_room["used_depth"] + 1
                 crawl_viewed_id = None
-                crawl_elapsed_minutes += round_length_minutes
+                crawl_elapsed_minutes, light_remaining_minutes = _advance_crawl_clock(
+                    crawl_elapsed_minutes, light_remaining_minutes, round_length_minutes, track_light
+                )
 
     elif action == "check_encounter":
         # A standalone risk check (e.g. searching around, listening at
@@ -4832,19 +5068,23 @@ def handle_action(
         # The Settings view's own "Reset to Defaults" - restores
         # every Settings-view field (both "Default ... DC" fields,
         # "Show Roll Details", "Show Treasure Quality", "Crawling
-        # Round Length") back to its original, hardcoded default.
+        # Round Length", "Track Torch"/"Track Lantern" and their two
+        # burn-time fields) back to its original, hardcoded default.
         # Deliberately narrower than "reset" above: this doesn't
         # touch the actual in-progress dungeon (crawl_history, the
         # live treasure_dc/encounter_dc pools, generated rooms,
-        # crawl_elapsed_minutes, ...) at all, only the settings
-        # themselves - elapsed time already spent isn't a "setting"
-        # any more than crawl_history is, so it stays exactly like
-        # every other piece of in-progress dungeon state here.
+        # crawl_elapsed_minutes, light_remaining_minutes, ...) at all,
+        # only the settings themselves - elapsed time and light
+        # already burned aren't "settings" any more than crawl_
+        # history is, so both stay exactly like every other piece of
+        # in-progress dungeon state here.
         default_encounter_dc = DEFAULT_ENCOUNTER_DC
         default_treasure_dc = DEFAULT_TREASURE_DC
         show_roll_details = False
         show_treasure_quality = False
         round_length_minutes = DEFAULT_ROUND_LENGTH_MINUTES
+        track_light = {key: False for key in LIGHT_SOURCES}
+        light_burn_minutes = {key: cfg["default_burn_minutes"] for key, cfg in LIGHT_SOURCES.items()}
 
     elif action == "reset":
         SESSION = _default_session()
@@ -4877,6 +5117,9 @@ def handle_action(
         "show_roll_details": show_roll_details,
         "show_treasure_quality": show_treasure_quality,
         "round_length_minutes": round_length_minutes,
+        "track_light": track_light,
+        "light_burn_minutes": light_burn_minutes,
+        "light_remaining_minutes": light_remaining_minutes,
     }
 
 
@@ -5010,6 +5253,38 @@ def _format_elapsed_time(total_minutes) -> str:
     if hours:
         return _pluralize(hours, "hour")
     return _pluralize(minutes, "minute")
+
+
+def _advance_crawl_clock(elapsed_minutes, light_remaining_minutes, round_length_minutes, track_light):
+    """
+    Advances the shared crawl clock by one round (round_length_minutes)
+    - both the running elapsed-time total (crawl_elapsed_minutes) and
+    every *individually* tracked light source's remaining burn time
+    (see LIGHT_SOURCES - `track_light` is a per-source dict, e.g.
+    {"torch": True, "lantern": False}, not one master on/off), each
+    floored at 0 rather than going negative. Called from every action
+    that counts as "a round" for elapsed time - "go_deeper", both
+    branches of "go_back", "enter_room", "ransack_room", "use_lift",
+    "use_secret_passage", "use_fireplace", "stay" - so light burns
+    down in perfect lockstep with elapsed time, never on some
+    separate schedule of its own. Kept as one shared helper
+    specifically so a future 9th trigger can't be added to the
+    elapsed-time side of this without also remembering the light
+    side - that split is exactly the kind of bug a shared helper
+    heads off.
+
+    A source with tracking off passes through unchanged, deliberately
+    - it doesn't deplete silently in the background while hidden, so
+    turning it on later starts from whatever was last actually shown
+    (0, fresh, until something is lit) rather than some number that
+    had been secretly ticking down the whole time.
+    """
+    elapsed_minutes += round_length_minutes
+    light_remaining_minutes = {
+        key: (max(0, minutes - round_length_minutes) if track_light.get(key) else minutes)
+        for key, minutes in light_remaining_minutes.items()
+    }
+    return elapsed_minutes, light_remaining_minutes
 
 
 def _with_optional_lead_line(line_html, body_html):
@@ -6513,6 +6788,69 @@ def _render_special_connection_controls(room, history):
     return ""
 
 
+def _render_light_gauges():
+    """
+    The optional torch/lantern timer (see LIGHT_SOURCES) - one small
+    row per *individually* tracked source (track_light is a
+    per-source dict, e.g. {"torch": True, "lantern": False} - see
+    handle_action's track_torch_form/track_lantern_form): its own
+    icon (recolored by state), a depleting bar, and a "Light Torch"/
+    "Refuel Lantern" button that resets it back to full. A source
+    with tracking off contributes no row at all, not a disabled/
+    empty one - and if nothing at all is tracked, this returns ""
+    outright rather than an empty wrapper div.
+
+    Three visual states, purely informational - no action in this app
+    is ever blocked by running low or hitting zero (see handle_action's
+    "refuel_light" and _advance_crawl_clock: nothing reads these
+    numbers except this function itself):
+    - normal (>20% remaining): the accent-ish warm tone every other
+      "this is fine" indicator in the app already uses.
+    - low (1-20%): shifts to an amber/orange warning tone - a calmer
+      heads-up, nothing urgent yet.
+    - out (0%, including "never lit yet" - both look the same, there's
+      nothing to distinguish them by): a dim, muted icon plus a slow,
+      gentle pulse on the bar - noticeable without being jarring or
+      demanding immediate action (see the "soft warning only, no
+      blocking" scope this was deliberately kept to).
+    """
+    track_light = SESSION.get("track_light") or {}
+    remaining = SESSION.get("light_remaining_minutes") or {}
+    full = SESSION.get("light_burn_minutes") or {}
+
+    rows = []
+    for key, cfg in LIGHT_SOURCES.items():
+        if not track_light.get(key):
+            continue
+
+        rem = remaining.get(key, 0)
+        cap = full.get(key, cfg["default_burn_minutes"])
+        pct = max(0, min(100, round(rem / cap * 100))) if cap else 0
+
+        if rem <= 0:
+            state = "out"
+        elif pct <= 20:
+            state = "low"
+        else:
+            state = "normal"
+
+        tooltip = f"{cfg['label']}: {_pluralize(rem, 'minute')} left of {_pluralize(cap, 'minute')}"
+        rows.append(f"""
+        <div class="light-gauge-row light-gauge-{state}">
+            <span class="light-gauge-icon" title="{tooltip}">{cfg['icon']}</span>
+            <div class="light-gauge-bar" title="{tooltip}">
+                <div class="light-gauge-fill" style="width:{pct}%"></div>
+            </div>
+            <button type="button" class="go-here-button light-gauge-refuel"
+                    onclick="refuelLight('{key}')">{cfg['refuel_label']}</button>
+        </div>
+        """)
+
+    if not rows:
+        return ""
+    return f'<div class="light-gauges">{"".join(rows)}</div>'
+
+
 def _render_crawling_view():
     history = SESSION.get("crawl_history", [])
     current_id = SESSION.get("crawl_current_id")
@@ -6566,6 +6904,7 @@ def _render_crawling_view():
     <div class="section">
         <div class="meta-line position-line">{position_note}</div>
         <div class="meta-line elapsed-time-line">{_time_cost_icon_html()}{_format_elapsed_time(elapsed_minutes)} elapsed</div>
+        {_render_light_gauges()}
         <div class="button-row">
             <button type="button" {go_back_disabled} title="{go_back_title}" onclick="runAction('go_back')">
                 {_time_cost_icon_html(large=True)}Go Back
@@ -6710,33 +7049,79 @@ def _render_settings_view():
     collapse to their plain "what it produced" form), "Show Treasure
     Quality" (see _show_treasure_quality - whether a treasure's
     quality tier name is shown at all, independent of the
-    roll-details setting), and "Crawling Round Length" (how many
-    minutes each round of Crawling Mode advances the clock by - see
-    crawl_elapsed_minutes). Explanations live in each field's own
-    `title` tooltip rather than a permanent line of text underneath,
-    to keep this view scannable as more settings get added here.
+    roll-details setting), "Crawling Round Length" (how many minutes
+    each round of Crawling Mode advances the clock by - see
+    crawl_elapsed_minutes), and "Track Torch"/"Track Lantern" (see
+    LIGHT_SOURCES - two independent toggles, not one master switch,
+    for the optional torch/lantern timer - each has its own burn-time
+    field, only shown once that source's own toggle is on).
+    Explanations live in each field's own `title` tooltip rather than
+    a permanent line of text underneath, to keep this view scannable
+    as more settings get added here.
 
-    All five take effect immediately, same as every other input in
-    this app - no separate "Save" step. Unlike the DC/round-length
-    fields (only read the next time some other action fires - nothing
-    watches them), both checkboxes have their own onchange so
-    toggling either alone re-renders the page right away, the same
-    way the Level dropdown's onLevelChange() does - the whole point
-    of those two settings specifically is to see their effect
-    immediately, not on the next unrelated click.
+    All of these take effect immediately, same as every other input
+    in this app - no separate "Save" step. Unlike the DC/round-length/
+    burn-time fields (only read the next time some other action fires
+    - nothing watches them), the checkboxes have their own onchange
+    so toggling one alone re-renders the page right away, the same
+    way the Level dropdown's onLevelChange() does - the whole point of
+    a display/feature toggle like these is to see its effect
+    immediately, not on the next unrelated click. That's also why a
+    source's burn-time field only appears once *that* source's own
+    "Track ..." checkbox is checked: it'd otherwise be a dead,
+    meaningless input for a feature that isn't even on.
 
     "Reset to Defaults" (the "reset_settings" action) restores every
     field on this page - all Settings-view fields, and only those -
     to its original hardcoded default. Deliberately narrower than the
     "reset" action Crawling Mode uses, which wipes the entire
     in-progress dungeon: settings are meant to persist across that
-    kind of reset, not be reset by it.
+    kind of reset, not be reset by it - and light already burned
+    (light_remaining_minutes) is dungeon state, not a setting, so it
+    isn't touched here either, the same as crawl_elapsed_minutes.
     """
     default_encounter_dc = SESSION.get("default_encounter_dc", DEFAULT_ENCOUNTER_DC)
     default_treasure_dc = SESSION.get("default_treasure_dc", DEFAULT_TREASURE_DC)
     round_length_minutes = SESSION.get("round_length_minutes", DEFAULT_ROUND_LENGTH_MINUTES)
     show_roll_details_checked = "checked" if _show_roll_details() else ""
     show_treasure_quality_checked = "checked" if _show_treasure_quality() else ""
+    track_light = SESSION.get("track_light") or {key: False for key in LIGHT_SOURCES}
+    track_torch_checked = "checked" if track_light.get("torch") else ""
+    track_lantern_checked = "checked" if track_light.get("lantern") else ""
+    light_burn_minutes = SESSION.get("light_burn_minutes") or {
+        key: cfg["default_burn_minutes"] for key, cfg in LIGHT_SOURCES.items()
+    }
+
+    # Each source's burn-time field only appears once that source's
+    # own toggle is on - independent of the other one, unlike the
+    # single shared "if track_light:" this used to be (see this
+    # function's own docstring on why there are two switches now, not
+    # one). "torch"/"lantern" are still explicit rather than a loop
+    # over LIGHT_SOURCES, same reasoning as before: only these two
+    # have their own wired-up handle_action parameter and DOM id.
+    torch_burn_field_html = ""
+    if track_light.get("torch"):
+        torch_burn_field_html = f"""
+        <div class="form-row">
+            <label for="torch-burn-minutes" title="How many minutes a freshly-lit torch lasts.">
+                Torch Burn Time (minutes):
+            </label>
+            <input type="number" id="torch-burn-minutes" name="torch-burn-minutes"
+                   value="{light_burn_minutes.get('torch', LIGHT_SOURCES['torch']['default_burn_minutes'])}">
+        </div>
+        """
+
+    lantern_burn_field_html = ""
+    if track_light.get("lantern"):
+        lantern_burn_field_html = f"""
+        <div class="form-row">
+            <label for="lantern-burn-minutes" title="How many minutes a freshly-refueled lantern lasts.">
+                Lantern Burn Time (minutes):
+            </label>
+            <input type="number" id="lantern-burn-minutes" name="lantern-burn-minutes"
+                   value="{light_burn_minutes.get('lantern', LIGHT_SOURCES['lantern']['default_burn_minutes'])}">
+        </div>
+        """
 
     return f"""
     <div class="section">
@@ -6775,6 +7160,22 @@ def _render_settings_view():
                 Show Treasure Quality
             </label>
         </div>
+        <div class="form-row checkbox-row">
+            <label title="Optional torch timer in Crawling Mode - purely informational, never blocks anything, just a quiet visual reminder of how much torchlight you have left.">
+                <input type="checkbox" id="track-torch" {track_torch_checked}
+                       onchange="onSettingsChange()">
+                Track Torch
+            </label>
+        </div>
+        {torch_burn_field_html}
+        <div class="form-row checkbox-row">
+            <label title="Optional lantern timer in Crawling Mode - purely informational, never blocks anything, just a quiet visual reminder of how much lantern oil you have left.">
+                <input type="checkbox" id="track-lantern" {track_lantern_checked}
+                       onchange="onSettingsChange()">
+                Track Lantern
+            </label>
+        </div>
+        {lantern_burn_field_html}
         <button type="button" title="Restores every setting above to its original default."
                 onclick="runAction('reset_settings')">
             Reset to Defaults
@@ -6917,7 +7318,7 @@ function renderApp() {
     document.getElementById("app").innerHTML = html;
 }
 
-async function dispatch(action, view, roomId, entryId) {
+async function dispatch(action, view, roomId, entryId, lightSource = null) {
     try {
         pyGame.handle_action(
             action,
@@ -6940,7 +7341,12 @@ async function dispatch(action, view, roomId, entryId) {
             getIntFieldArg("default-treasure-dc"),
             getCheckbox("show-roll-details"),
             getCheckbox("show-treasure-quality"),
-            getIntFieldArg("round-length-minutes")
+            getIntFieldArg("round-length-minutes"),
+            getCheckbox("track-torch"),
+            getCheckbox("track-lantern"),
+            getIntFieldArg("torch-burn-minutes"),
+            getIntFieldArg("lantern-burn-minutes"),
+            lightSource == null ? null : String(lightSource)
         );
         renderApp();
     } catch (err) {
@@ -6987,6 +7393,15 @@ async function ransackRoom(roomId) {
 
 async function openSafe(roomId) {
     return dispatch("open_safe", null, roomId);
+}
+
+async function refuelLight(source) {
+    // "Light Torch" / "Refuel Lantern" - unlike removeMonsterGroup/
+    // removeTreasureItem (which reuse the roomId/entryId slots for
+    // their own unrelated ids), this has its own dedicated
+    // lightSource param instead, since a light source isn't a room
+    // or an entry at all - roomId/entryId stay null here.
+    return dispatch("refuel_light", null, null, null, source);
 }
 
 async function removeMonsterGroup(roomId, groupId) {
